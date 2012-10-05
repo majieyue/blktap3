@@ -1,20 +1,20 @@
 Thanos Makatos, 4th October 2012
 
 								 In a Nutshell
-blktap3 is a userspace application based on blktap2. The main difference
+blktap3 is a user-space application based on blktap2. The main difference
 between them is that blktap3 talks directly to blkfront, instead of relying on
-blktap and blkback kernel modules do this job for it. The goal of blktap3 is to
-further simplify Xen by effectively merging blktap and blkback kernel modules,
-and moving them into userspace, where development and debugging are much
-easier. In addition, one could expect minor performance gains, though this is
-not the main focus of this endeavour. blktap3 is based on the blktap2 fork
-living in github (https://github.com/xen-org/blktap, sometimes called as
-"blktap two-and-a-half") commit 4212b833df6321fac4ccabb75f7f9a476553d6d0 or so.
-blktap2 was once forked (accidentaly, so to speak) from the "official" blktap2
+blktap and blkback kernel modules. The goal of blktap3 is to further simplify
+Xen by effectively merging blktap and blkback kernel modules, and moving them
+into user-space, where development and debugging are much easier. In addition,
+one could expect minor performance gains, though this is not the main focus of
+this endeavour. blktap3 is based on the blktap2 fork living in github
+(https://github.com/xen-org/blktap, sometimes called as "blktap
+two-and-a-half") commit 4212b833df6321fac4ccabb75f7f9a476553d6d0 or so.
+blktap2 was once forked (accidentally, so to speak) from the "official" blktap2
 living in Xen, and has been actively maintained and developed mostly by Citrix.
 blktap3 was initially prototyped by Daniel Stodden, made to work by Santosh
-Jodh, and finally handed to me! blktap3 is under heavy developement: a lot of
-functionality must be implemented, considerable cleanup is needed, and
+Jodh, and finally handed to me! blktap3 is under heavy development: a lot of
+functionality must be implemented, considerable clean up is needed, and
 documentation must be written (code-wise, manuals, and design &
 implementation). Due to lack of documentation, there may be some design options
 I am not aware of, so there may be some questions where it won't be easy for me
@@ -22,31 +22,37 @@ to answer.
 
 							 Status & Pending Work
 blktap3 is in a state where it compiles and can be used to run PV guests
-without pygrub. libxl complains with some errors when shuting down the guest,
+without pygrub. libxl complains with some errors when shutting down the guest,
 but I haven't seen them causing any real damage.  Pending work items:
 Functionality:
 - pygrub (this used to work but I broke it when rebasing a libxl patch :-S)
-- HVM
+- HVM guests
 - hotplug/unplug
 - persistent grants
 - multipage blk rings
-Cleanup:
-- Identation & coding style: The code is inconsistently idented (tabs and
-  spaces are mixed) and the the coding style does not conform to the Xen
-  official one.
-- Obsolete files: Most of the files that implementing blktap/blkback-specific
-functionality have been removede, though some of them may have been missed. A
+Clean up:
+- Indentation & coding style: The code is inconsistently indented (tabs and
+spaces are mixed) and the coding style does not conform to the Xen official
+one.
+- Obsolete files: Most of the files implementing blktap/blkback-specific
+functionality have been removed, though some of them may have been missed. A
 thorough examination of all files should be done.
 - Unused stuff: variables, #define's, #include's, fucntions, structs and struct members, etc: there are probably many of these. Lots of them have been removed tough there may still be more lurking around.
-- Mergeable structs and functions: there are a few struct that only exist within
-a struct, they should be merged into the parent struct to improve code clarity.
-Similarly, there are functions only called by one function; this make sense in some cases as it logically separates pieces of code within the same function, however there are some cases in the blktap3 code where this is not the case.
-- TODO's and FIXME's: As blktap3 is under cleanup/development, the code is sprikled with lots of TODO and FIXME tags.
+- Merge-able structs and functions: there are a few struct that only exist
+within a struct, they should be merged into the parent struct to improve code
+clarity.  Similarly, there are functions only called by one function; this make
+sense in some cases as it logically separates pieces of code within the same
+function, however there are some cases in the blktap3 code where this is not
+the case.
+- TODO's and FIXME's: As blktap3 is under clean up/development, the code is
+sprinkled with lots of TODO and FIXME tags.
 Documentation: There is scant documentation in the code, no manuals, and no design and implementation documents. This should be addressed as it discourages people from contributing to blktap3. Also, the blktap2/README contains useful
 information that should be updated and imported.
-License: blktap3 is going to be probably GPL2 or something like that. Probably
-there are files with different/conflicting licenses, this must be fixed.
-Sync with the github blktap2: The github blktap2 has received a lot of bug fixes that have not made it into the blktap3 fork, these bug fixes should be imported to blktap3. Also, there is new functionality (i.e. mirroring) that should be
+License: blktap3 is going to be GPL2 or something like that. Probably there are
+files with different/conflicting licenses, this must be fixed.
+Sync with the github blktap2: The github blktap2 has received a lot of bug fixes
+that have not made it into the blktap3 fork, these bug fixes should be imported 
+to blktap3. Also, there is new functionality (i.e. mirroring) that should be
 imported.
 - Installation: it's not clear why each binary goes to a specific location
 (some go to /usr/bin, other to /sbin), this should be justified or at least
@@ -59,14 +65,21 @@ The most important changes w.r.t. to github blktap2 are the following:
 - Directories blktap3/part/, blktap3/lvm/, and blktap3/vhd/ have remained
 mostly intact. blktap3/vhd/lib/test/ is not included until it has been
 examined.
-- libxl: The main changes there are (1) make libxl__blktap_devpath not return a device (there's no device in dom0 anymore) but a status code, (2) implement tools/libxl/libxl_blktap3.c, which implements spawning a tapdisk. (3) added a new backend type "xenio" mapped to "tap" in a guest configuration file.
+- libxl: The main changes there are: (1) make libxl__blktap_devpath not return a
+device (there's no device in dom0 anymore) but a status code, (2) implement
+tools/libxl/libxl_blktap3.c, which implements spawning a tapdisk. (3) added a
+new backend type "xenio" mapped to "tap" in a guest configuration file,
+(4) Makefile changes.
 - Directory blktap3/xenio/: This is a completely new directory containing the
- xenio daemon, a user-space process that implements part of the blktap/blkback
+xenio daemon, a user-space process that implements part of the blktap/blkback
 kernel modules functionality. It monitors XenStore for VBD plugs/unplugs,
 creates the ring buffers, and initiates the connection between blkfront and
-tapdisk.
-- Directory bltkap3/control/: files tap-ctl-xen.[ch] have been added, they implement functionality that allows the xenio daemon to instruct a tapdisk to connect
-to a block interface.
+tapdisk. This new piece of code requires considerable cleanup and documentation.
+Unfortunatelly it was not written by me, so there are many parts of it I don't
+know how/why they work.
+- Directory bltkap3/control/: files tap-ctl-xen.[ch] have been added, they
+implement functionality that allows the xenio daemon to instruct a tapdisk to
+connect to a block interface.
 - Modules in blktap3/drivers/: The following modules are not used by Citrix
 blktap2 and may require substantial effort, so I left them out for the moment
 in order to emphasize on the core functionality of blktap3 (they will be,
@@ -79,8 +92,9 @@ fixes are missed.
 blktap3 is experimental, backup your data etc. It probably overwrites Xen
 blktap2 binaries, so installing and using it may leave your machine in an
 inconsistent state.
-- apply libxl patches
 - checkout blktap3 under tools/blktap3
-- compile and install it: make install (you can override the installation directories INSTDIR, SBINDIR and the library directoy LIBDIR when calling make)
-- run xenio daemon (xenio -D to enable debug messages)
-- create guest config
+- compile and install blktap3: cd tools/blktap3 && make install (you can override the installation directories INSTDIR, SBINDIR and the library directory LIBDIR when calling make)
+- apply the libxl patch (tools/blktap3/libxl.patch)
+- compile and install libxl (no need to reboot) 
+- run the xenio daemon (xenio -D to enable debug messages)
+- create a guest configuration: i.e. disk = ['backendtype=tap,format=vhd,vdev=xvda,access=rw,target=/root/debian.vhd']

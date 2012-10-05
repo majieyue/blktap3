@@ -17,12 +17,24 @@
 #include <stdarg.h>
 #include <string.h>
 #include <assert.h>
+#include <syslog.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <libgen.h>
+#include <getopt.h>
+#include <sys/ioctl.h>
+#include <sys/mount.h>
 #include <xenstore.h>
 #include <xen/xen.h>
 #include <xen/io/xenbus.h>
-#include <syslog.h>
+
+#include <xen/grant_table.h>
+#include <xen/event_channel.h>
 
 #include "blktap.h"
+#include "tap-ctl.h"
+#include "tap-ctl-xen.h"
+#include "tap-ctl-info.h"
 #include "xenio.h"
 #include "xenio-private.h"
 
@@ -44,6 +56,42 @@ struct xenio_backend_ops {
 };
 
 TAILQ_HEAD(tq_xenio_device, xenio_device);
+
+/**
+ * TODO Rename, there's no blkback anymore.
+ * 
+ * Additional state for the actual virtual block device.
+ */
+typedef struct blkback_device {
+    dev_t dev;
+
+    /* TODO already in struct xenio_device */
+    domid_t domid;
+    int devid;
+
+    grant_ref_t *gref;
+    evtchn_port_t port;
+
+    /**
+	 * Descriptor of the tapdisk process serving this virtual block device.
+	 */
+    tap_list_t tap;
+
+    /**
+	 * Sector size.
+	 */
+    unsigned int sector_size;
+
+    /**
+	 * Number of sectors.
+	 */
+    unsigned long long sectors;
+
+    /**
+	 * TODO ???
+	 */
+    unsigned int info;
+} blkback_device_t;
 
 /**
  * TODO A block device in the guest.
@@ -79,31 +127,27 @@ struct xenio_device {
     char *frontend_path;
     char *frontend_state_path;
 
-    /* FIXME This is ALWAYS struct blkback_device */
-    void *private;
+    blkback_device_t *bdev;
 };
+
+/*
+ * TODO "xenio" is defined in the IDL, take it from there
+ */
+#define XENIO_BACKEND_NAME	"xenio"
+#define XENIO_BACKEND_PATH	"backend/"XENIO_BACKEND_NAME
+#define XENIO_BACKEND_TOKEN	"backend-"XENIO_BACKEND_NAME
 
 /**
  * A backend, essentially the collection of all necessary handles and
- * descriptors. Currently we only support one backend per xenio daemon.
- *
- * TODO We don't need multiple backends per xenio daemon, so this should be
- * modified to:
- *	static struct xenio_backend {
- *		...
- *	} backend;
+ * descriptors.
  */
-struct xenio_backend {
+static struct xenio_backend {
 
     /**
 	 * A handle to xenstore.
 	 */
     struct xs_handle *xs;
     xs_transaction_t xst;
-
-    char *name;
-    char *path;
-    char *token;
 
     /**
 	 * A backend has many devices.
@@ -117,7 +161,7 @@ struct xenio_backend {
 
     const struct xenio_backend_ops *ops;
     int max_ring_page_order;
-};
+} backend;
 
 #define xenio_backend_for_each_device(_device, _next, _backend)	\
 	TAILQ_FOREACH_SAFE(_device, &(_backend)->devices, backend_entry, _next)
@@ -185,22 +229,6 @@ static char *xenio_xs_read(struct xs_handle *xs, xs_transaction_t xst,
     return s;
 }
 
-__printf(3, 4)
-static bool xenio_xs_exists(struct xs_handle *xs,
-                            xs_transaction_t xst, const char *fmt, ...)
-{
-    va_list ap;
-    char *s;
-
-    va_start(ap, fmt);
-    s = xenio_xs_vread(xs, xst, fmt, ap);
-    va_end(ap);
-    if (s)
-        free(s);
-
-    return s != NULL;
-}
-
 /**
  * Retrieves the device name from xenstore,
  * i.e. backend/xenio/<domid>/<devname>/@path
@@ -210,7 +238,7 @@ static char *xenio_device_read(xenio_device_t * device, const char *path)
     xenio_backend_t *backend = device->backend;
 
     return xenio_xs_read(backend->xs, backend->xst, "%s/%d/%s/%s",
-                         backend->path, device->domid, device->name, path);
+                         XENIO_BACKEND_PATH, device->domid, device->name, path);
 }
 
 /**
@@ -305,7 +333,7 @@ static inline int xenio_device_vprintf(xenio_device_t * device,
     int err;
 
     path =
-        mprintf("%s/%d/%s/%s", backend->path, device->domid, device->name,
+        mprintf("%s/%d/%s/%s", XENIO_BACKEND_PATH, device->domid, device->name,
                 key);
     if (!path) {
         err = -errno;
@@ -592,14 +620,35 @@ static inline int xenio_backend_create_device(xenio_backend_t * backend,
 }
 
 /**
+ * TODO Only called by xenio_backend_device_exists, merge into it?
+ */
+__printf(3, 4)
+static inline bool xenio_xs_exists(struct xs_handle *xs,
+                            xs_transaction_t xst, const char *fmt, ...)
+{
+    va_list ap;
+    char *s;
+
+    va_start(ap, fmt);
+    s = xenio_xs_vread(xs, xst, fmt, ap);
+    va_end(ap);
+    if (s)
+        free(s);
+
+    return s != NULL;
+}
+
+/**
  * Tells whether the device exists on the domain by looking at xenstore.
+ *
+ * TODO Only called by xenio_backend_probe_device, merge into it?
  */
 static inline bool xenio_backend_device_exists(xenio_backend_t * backend,
                                                int domid, const char *name)
 {
     /* i.e. backend/xenio/<domid>/<device name> */
     return xenio_xs_exists(backend->xs, backend->xst, "%s/%d/%s",
-                           backend->path, domid, name);
+                           XENIO_BACKEND_PATH, domid, name);
 }
 
 /**
@@ -647,7 +696,8 @@ static int xenio_backend_probe_device(xenio_backend_t * backend, int domid,
                               device->domid == domid &&
                               !strcmp(device->name, name));
 
-    /* If xenstore says that the device exists but it's not in our device list,
+    /*
+	 * If xenstore says that the device exists but it's not in our device list,
      * we must create it. If it's the other way around, this is a removal. If
      * xenstore says that the device exists and it's in our device list, TODO
      * we must check serial.
@@ -704,7 +754,7 @@ static inline int xenio_backend_scan(xenio_backend_t * backend)
      * probe the new ones
      */
 
-    dir = xs_directory(backend->xs, backend->xst, backend->path, &n);
+    dir = xs_directory(backend->xs, backend->xst, XENIO_BACKEND_PATH, &n);
     if (!dir)
         return 0;
 
@@ -716,7 +766,7 @@ static inline int xenio_backend_scan(xenio_backend_t * backend)
         if (*end != 0 || end == dir[i])
             continue;
 
-        path = mprintf("%s/%d", backend->path, domid);
+        path = mprintf("%s/%d", XENIO_BACKEND_PATH, domid);
         assert(path != NULL);
 
         sub = xs_directory(backend->xs, backend->xst, path, &m);
@@ -786,7 +836,7 @@ static inline int xenio_backend_handle_backend_watch(xenio_backend_t *
     if (!s)
         goto scan;
 
-    assert(!strcmp(s, backend->name));
+    assert(!strcmp(s, XENIO_BACKEND_NAME));
 
     s = strtok(NULL, "/");
     if (!s)
@@ -865,8 +915,8 @@ static inline void xenio_backend_read_watch(xenio_backend_t * backend)
          * The result is xenio_backend_handle_backend_watch not doing anything
          * interesting, it only checks the 'xenio-serial'.
          */
-    case 'b':                  /* token is backend-@name, i.e. backend-xenio */
-        if (!strcmp(token, backend->token)) {
+    case 'b': /* token is backend-xenio */
+        if (!strcmp(token, XENIO_BACKEND_TOKEN)) {
             err = xenio_backend_handle_backend_watch(backend, path);
             break;
         }
@@ -910,21 +960,6 @@ int xenio_backend_fd(xenio_backend_t * backend)
 
 static void xenio_backend_destroy(xenio_backend_t * backend)
 {
-    if (backend->token) {
-        free(backend->token);
-        backend->token = NULL;
-    }
-
-    if (backend->path) {
-        free(backend->path);
-        backend->path = NULL;
-    }
-
-    if (backend->name) {
-        free(backend->name);
-        backend->name = NULL;
-    }
-
     if (backend->xs) {
         xs_daemon_close(backend->xs);
         backend->xs = NULL;
@@ -942,33 +977,14 @@ static void xenio_backend_destroy(xenio_backend_t * backend)
  * TODO What's the use of the token? Aren't we the only ones to watch this
  * path? It would only make sense if we want to run multiple xenio daemons.
  */
-xenio_backend_t *xenio_backend_create(const char *name,
-                                      const struct xenio_backend_ops *ops,
-                                      int max_ring_page_order)
+static inline int xenio_backend_create(const struct xenio_backend_ops *ops,
+		int max_ring_page_order, xenio_backend_t * backend)
 {
-    xenio_backend_t *backend = NULL;
     bool nerr;
     int err = -EINVAL;
 
-    if (!name) {
-        WARN("missing name\n");
-        goto fail;
-    }
-
-    if (strchr(name, '/')) {
-        WARN("name cannot contain the '\' character\n");
-        goto fail;
-    }
-
     if (!ops) {
         WARN("no backend operations\n");
-        goto fail;
-    }
-
-    backend = calloc(1, sizeof(*backend));
-    if (!backend) {
-        WARN("error allocating memory\n");
-        err = -errno;
         goto fail;
     }
 
@@ -982,26 +998,8 @@ xenio_backend_t *xenio_backend_create(const char *name,
         goto fail;
     }
 
-    backend->name = strdup(name);
-    if (!backend->name) {
-        err = -errno;
-        goto fail;
-    }
-
-    backend->path = mprintf("backend/%s", backend->name);
-    if (!backend->path) {
-        err = -ENOMEM;
-        goto fail;
-    }
-
-    backend->token = mprintf("backend-%s", backend->name);
-    if (!backend->token) {
-        err = -ENOMEM;
-        goto fail;
-    }
-
     /* set a watch on @path */
-    nerr = xs_watch(backend->xs, backend->path, backend->token);
+    nerr = xs_watch(backend->xs, XENIO_BACKEND_PATH, XENIO_BACKEND_TOKEN);
     if (!nerr) {
         err = -errno;
         goto fail;
@@ -1009,73 +1007,14 @@ xenio_backend_t *xenio_backend_create(const char *name,
 
     backend->ops = ops;
 
-    return backend;
+    return 0;
 
   fail:
     if (backend)
         xenio_backend_destroy(backend);
 
-    errno = -err;
-    return NULL;
+    return -err;
 }
-
-/*
- * TODO Don't put header files in the middle of the file
- */
-#include <fcntl.h>
-#include <unistd.h>
-#include <libgen.h>
-#include <getopt.h>
-#include <sys/ioctl.h>
-#include <sys/mount.h>
-
-#include <xen/grant_table.h>
-#include <xen/event_channel.h>
-
-#include "blktap.h"
-#include "tap-ctl.h"
-#include "tap-ctl-xen.h"
-#include "tap-ctl-info.h"
-
-static int blktap_major;
-
-typedef struct blkback_device blkback_device_t;
-
-/**
- * TODO Rename, there's no blkback anymore.
- * 
- * Additional state for the actual virtual block device.
- */
-struct blkback_device {
-    dev_t dev;
-
-    /* TODO already in struct xenio_device */
-    domid_t domid;
-    int devid;
-
-    grant_ref_t *gref;
-    evtchn_port_t port;
-
-    /**
-	 * Descriptor of the tapdisk process serving this virtual block device.
-	 */
-    tap_list_t tap;
-
-    /**
-	 * Sector size.
-	 */
-    unsigned int sector_size;
-
-    /**
-	 * Number of sectors.
-	 */
-    unsigned long long sectors;
-
-    /**
-	 * TODO ???
-	 */
-    unsigned int info;
-};
 
 /**
  * Retrieves the tapdisk designated to serve this device.
@@ -1136,7 +1075,7 @@ static int blkback_read_otherend_proto(xenio_device_t * xbdev)
 
 int blkback_connect_tap(xenio_device_t * xbdev)
 {
-    blkback_device_t *bdev = xbdev->private;
+    blkback_device_t *bdev = xbdev->bdev;
     evtchn_port_t port;
     grant_ref_t *gref = NULL;
     int n, proto, err = 0;
@@ -1264,7 +1203,7 @@ int blkback_connect_tap(xenio_device_t * xbdev)
 
 int blkback_disconnect_tap(xenio_device_t * xbdev)
 {
-    blkback_device_t *bdev = xbdev->private;
+    blkback_device_t *bdev = xbdev->bdev;
     int err = 0;
 
     if (bdev->gref == NULL || bdev->port < 0)
@@ -1296,7 +1235,7 @@ int blkback_disconnect_tap(xenio_device_t * xbdev)
  */
 static inline int blkback_probe_device(xenio_device_t * xbdev)
 {
-    blkback_device_t *bdev = xbdev->private;
+    blkback_device_t *bdev = xbdev->bdev;
     int err;
     unsigned int info;
 
@@ -1332,7 +1271,7 @@ static int blkback_probe(xenio_device_t * xbdev, domid_t domid,
     int err;
     char *end;
 
-    DBG("probe blkback %s-%d-%s\n", xbdev->backend->name, xbdev->domid,
+    DBG("probe blkback %s-%d-%s\n", XENIO_BACKEND_NAME, xbdev->domid,
         xbdev->name);
 
     bdev = calloc(1, sizeof(*bdev));
@@ -1341,7 +1280,7 @@ static int blkback_probe(xenio_device_t * xbdev, domid_t domid,
         err = -errno;
         goto fail;
     }
-    xbdev->private = bdev;
+    xbdev->bdev = bdev;
 
     bdev->domid = domid;
     bdev->devid = strtoul(name, &end, 0);
@@ -1358,7 +1297,7 @@ static int blkback_probe(xenio_device_t * xbdev, domid_t domid,
     }
 
     blkback_probe_device(xbdev);
-    DBG("got %s-%d-%d with tapdev %d/%d\n", xbdev->backend->name,
+    DBG("got %s-%d-%d with tapdev %d/%d\n", XENIO_BACKEND_NAME,
         xbdev->domid, bdev->devid, bdev->tap.pid, bdev->tap.minor);
 
     return 0;
@@ -1372,10 +1311,10 @@ static int blkback_probe(xenio_device_t * xbdev, domid_t domid,
 
 void blkback_remove(xenio_device_t * xbdev)
 {
-    blkback_device_t *bdev = xbdev->private;
+    blkback_device_t *bdev = xbdev->bdev;
 
     DBG("remove %s-%d-%s\n",
-        xbdev->backend->name, xbdev->domid, xbdev->name);
+        XENIO_BACKEND_NAME, xbdev->domid, xbdev->name);
 
     blkback_device_destroy(bdev);
 }
@@ -1389,7 +1328,7 @@ static inline int blkback_frontend_changed(xenio_device_t * xbdev,
     int err = 0;
 
     DBG("frontend_changed %s-%d-%s state=%d\n",
-        xbdev->backend->name, xbdev->domid, xbdev->name, state);
+        XENIO_BACKEND_NAME, xbdev->domid, xbdev->name, state);
 
     switch (state) {
     case XenbusStateUnknown:
@@ -1433,27 +1372,11 @@ static inline int blkback_frontend_changed(xenio_device_t * xbdev,
     return err;
 }
 
-struct xenio_backend_ops blkback_ops = {
+static struct xenio_backend_ops blkback_ops = {
     .probe = blkback_probe,
     .remove = blkback_remove,
     .frontend_changed = blkback_frontend_changed,
 };
-
-/**
- * TODO remove and call xenio_backend_create directly
- */
-static xenio_backend_t *blkback_create(const char *name,
-                                       int max_ring_page_order)
-{
-    DBG("name=%s max-ring-page-order=%d major=%d\n",
-        name, max_ring_page_order, blktap_major);
-    return xenio_backend_create(name, &blkback_ops, max_ring_page_order);
-}
-
-static void blkback_destroy(xenio_backend_t * backend)
-{
-    xenio_backend_destroy(backend);
-}
 
 /**
  * Runs the backend.
@@ -1512,16 +1435,14 @@ static void usage(FILE * stream, const char *prog)
 {
     fprintf(stream,
             "usage: %s\n"
-            "        [-m|--max-ring-order <max ring page order>]\n"
-            "        [-n|--name <name>]\n"
-            "        [-D|--debug]\n" "        [-h|--help]\n", prog);
+            "\t[-m|--max-ring-order <max ring page order>]\n"
+            "\t[-D|--debug]\n"
+			"\t[-h|--help]\n", prog);
 }
 
 int main(int argc, char **argv)
 {
-    xenio_backend_t *backend;
     const char *prog;
-    const char *opt_name;
     int opt_debug, opt_max_ring_page_order;
     int err;
 
@@ -1529,13 +1450,11 @@ int main(int argc, char **argv)
 
     opt_debug = 0;
     opt_max_ring_page_order = 0;
-    opt_name = "xenio";
 
     do {
         const struct option longopts[] = {
             {"help", 0, NULL, 'h'},
             {"max-ring-order", 1, NULL, 'm'},
-            {"name", 1, NULL, 'n'},
             {"debug", 0, NULL, 'D'},
         };
         int c;
@@ -1553,9 +1472,6 @@ int main(int argc, char **argv)
             if (opt_max_ring_page_order < 0)
                 goto usage;
             break;
-        case 'n':
-            opt_name = optarg;
-            break;
         case 'D':
             opt_debug = 1;
             break;
@@ -1564,7 +1480,7 @@ int main(int argc, char **argv)
         }
     } while (1);
 
-    blkback_ident = mprintf("backend-%s", opt_name);
+    blkback_ident = XENIO_BACKEND_TOKEN;
     if (opt_debug)
         xenio_vlog = blkback_vlog_fprintf;
     else
@@ -1578,16 +1494,15 @@ int main(int argc, char **argv)
         }
     }
 
-    backend = blkback_create(opt_name, opt_max_ring_page_order);
-    if (!backend) {
-        err = -errno;
+	if (!(err = xenio_backend_create( &blkback_ops, opt_max_ring_page_order,
+					&backend))) {
         WARN("error creating blkback: %s\n", strerror(err));
         goto fail;
     }
 
-    err = blkback_run(backend);
+    err = blkback_run(&backend);
 
-    blkback_destroy(backend);
+    xenio_backend_destroy(&backend);
 
   fail:
     return err ? -err : 0;

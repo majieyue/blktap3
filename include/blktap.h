@@ -38,6 +38,8 @@
 /* FIXME */
 #define __printf(a, b) __attribute__((format(printf, a, b)))
 
+#define __scanf(_f, _a)         __attribute__((format (scanf, _f, _a)))
+
 #define TAILQ_MOVE_HEAD(node, src, dst, entry)	\
 	TAILQ_REMOVE(src, node, entry);				\
 	TAILQ_INSERT_HEAD(dst, node, entry);

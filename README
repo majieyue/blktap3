@@ -34,6 +34,8 @@ Clean up:
 - Indentation & coding style: The code is inconsistently indented (tabs and
 spaces are mixed) and the coding style does not conform to the Xen official
 one.
+- File blktap3/xenio/blkif.h: this is a copy of a qemu header, I haven't yet
+examined how the structures of this file are used.
 - Obsolete files: Most of the files implementing blktap/blkback-specific
 functionality have been removed, though some of them may have been missed. A
 thorough examination of all files should be done.

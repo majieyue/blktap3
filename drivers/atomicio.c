@@ -35,31 +35,28 @@
 /*
  * ensure all of data on socket comes through. f==read || f==vwrite
  */
-size_t
-atomicio(f, fd, _s, n)
-	ssize_t (*f) (int, void *, size_t);
-	int fd;
-	void *_s;
-	size_t n;
+size_t atomicio(f, fd, _s, n) ssize_t(*f) (int, void *, size_t);
+int fd;
+void *_s;
+size_t n;
 {
-	char *s = _s;
-	size_t pos = 0;
-	ssize_t res;
+    char *s = _s;
+    size_t pos = 0;
+    ssize_t res;
 
-	while (n > pos) {
-		res = (f) (fd, s + pos, n - pos);
-		switch (res) {
-		case -1:
-			if (errno == EINTR || errno == EAGAIN)
-				continue;
-			return 0;
-		case 0:
-			errno = EPIPE;
-			return pos;
-		default:
-			pos += (size_t)res;
-		}
-	}
-	return (pos);
+    while (n > pos) {
+        res = (f) (fd, s + pos, n - pos);
+        switch (res) {
+        case -1:
+            if (errno == EINTR || errno == EAGAIN)
+                continue;
+            return 0;
+        case 0:
+            errno = EPIPE;
+            return pos;
+        default:
+            pos += (size_t) res;
+        }
+    }
+    return (pos);
 }
-

@@ -39,129 +39,120 @@
 
 #define BUG_ON(_cond) if (_cond) { td_panic(); }
 
-static void
-__stats_vsprintf(td_stats_t *st,
-		      const char *fmt, va_list ap)
+static void __stats_vsprintf(td_stats_t * st, const char *fmt, va_list ap)
 {
-	size_t size = st->buf + st->size - st->pos;
-	st->pos += vsnprintf(st->pos, size, fmt, ap);
+    size_t size = st->buf + st->size - st->pos;
+    st->pos += vsnprintf(st->pos, size, fmt, ap);
 }
 
 static void __printf(2, 3)
-__stats_sprintf(td_stats_t *st,
-		     const char *fmt, ...)
+__stats_sprintf(td_stats_t * st, const char *fmt, ...)
 {
-	va_list ap;
+    va_list ap;
 
-	va_start(ap, fmt);
-	__stats_vsprintf(st, fmt, ap);
-	va_end(ap);
+    va_start(ap, fmt);
+    __stats_vsprintf(st, fmt, ap);
+    va_end(ap);
+}
+
+static void __stats_enter(td_stats_t * st)
+{
+    st->depth++;
+    BUG_ON(st->depth > TD_STATS_MAX_DEPTH);
+    st->n_elem[st->depth] = 0;
+}
+
+static void __stats_leave(td_stats_t * st)
+{
+    st->depth--;
+}
+
+static void __stats_next(td_stats_t * st)
+{
+    int n_elem;
+
+    n_elem = st->n_elem[st->depth];
+    if (n_elem > 0)
+        __stats_sprintf(st, ", ");
+    st->n_elem[st->depth]++;
+}
+
+static void __tapdisk_stats_enter(td_stats_t * st, char t)
+{
+    __stats_sprintf(st, "%c ", t);
+    __stats_enter(st);
+}
+
+void tapdisk_stats_enter(td_stats_t * st, char t)
+{
+    __stats_next(st);
+    __tapdisk_stats_enter(st, t);
+}
+
+void tapdisk_stats_leave(td_stats_t * st, char t)
+{
+    __stats_leave(st);
+    __stats_sprintf(st, " %c", t);
 }
 
 static void
-__stats_enter(td_stats_t *st)
+tapdisk_stats_vval(td_stats_t * st, const char *conv, va_list ap)
 {
-	st->depth++;
-	BUG_ON(st->depth > TD_STATS_MAX_DEPTH);
-	st->n_elem[st->depth] = 0;
+    char t = conv[0], fmt[32];
+
+    __stats_next(st);
+
+    switch (t) {
+    case 's':
+        __stats_vsprintf(st, "\"%s\"", ap);
+        break;
+
+    default:
+        sprintf(fmt, "%%%s", conv);
+        __stats_vsprintf(st, fmt, ap);
+        break;
+    }
 }
 
-static void
-__stats_leave(td_stats_t *st)
+void tapdisk_stats_val(td_stats_t * st, const char *conv, ...)
 {
-	st->depth--;
-}
+    va_list ap;
 
-static void
-__stats_next(td_stats_t *st)
-{
-	int n_elem;
-
-	n_elem = st->n_elem[st->depth];
-	if (n_elem > 0)
-		__stats_sprintf(st, ", ");
-	st->n_elem[st->depth]++;
-}
-
-static void
-__tapdisk_stats_enter(td_stats_t *st, char t)
-{
-	__stats_sprintf(st, "%c ", t);
-	__stats_enter(st);
+    va_start(ap, conv);
+    tapdisk_stats_vval(st, conv, ap);
+    va_end(ap);
 }
 
 void
-tapdisk_stats_enter(td_stats_t *st, char t)
+tapdisk_stats_field(td_stats_t * st, const char *key, const char *conv,
+                    ...)
 {
-	__stats_next(st);
-	__tapdisk_stats_enter(st, t);
-}
+    va_list ap;
+    int n_elem;
+    char t;
 
-void
-tapdisk_stats_leave(td_stats_t *st, char t)
-{
-	__stats_leave(st);
-	__stats_sprintf(st, " %c", t);
-}
+    n_elem = st->n_elem[st->depth]++;
+    if (n_elem > 0)
+        __stats_sprintf(st, ", ");
 
-static void
-tapdisk_stats_vval(td_stats_t *st, const char *conv, va_list ap)
-{
-	char t = conv[0], fmt[32];
+    __stats_sprintf(st, "\"%s\": ", key);
 
-	__stats_next(st);
+    if (!conv) {
+        __stats_sprintf(st, "null");
+        return;
+    }
 
-	switch (t) {
-	case 's':
-		__stats_vsprintf(st, "\"%s\"", ap);
-		break;
-
-	default:
-		sprintf(fmt, "%%%s", conv);
-		__stats_vsprintf(st, fmt, ap);
-		break;
-	}
-}
-
-void
-tapdisk_stats_val(td_stats_t *st, const char *conv, ...)
-{
-	va_list ap;
-
-	va_start(ap, conv);
-	tapdisk_stats_vval(st, conv, ap);
-	va_end(ap);
-}
-
-void
-tapdisk_stats_field(td_stats_t *st, const char *key, const char *conv, ...)
-{
-	va_list ap;
-	int n_elem;
-	char t;
-
-	n_elem = st->n_elem[st->depth]++;
-	if (n_elem > 0)
-		__stats_sprintf(st, ", ");
-
-	__stats_sprintf(st, "\"%s\": ", key);
-
-	if (!conv) {
-		__stats_sprintf(st, "null");
-		return;
-	}
-
-	t = conv[0];
-	switch (t) {
-	case '[':
-	case '{':
-		__tapdisk_stats_enter(st, t);
-		break;
-	default:
-		va_start(ap, conv);
-		__stats_enter(st);
-		tapdisk_stats_vval(st, conv, ap);
-		__stats_leave(st);
-		va_end(ap);
-	}
+    t = conv[0];
+    switch (t) {
+    case '[':
+    case '{':
+        __tapdisk_stats_enter(st, t);
+        break;
+    default:
+        va_start(ap, conv);
+        __stats_enter(st);
+        tapdisk_stats_vval(st, conv, ap);
+        __stats_leave(st);
+        va_end(ap);
+    }
 }

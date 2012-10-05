@@ -49,24 +49,24 @@
 typedef int (*vhd_util_func_t) (int, char **);
 
 struct command {
-	char               *name;
-	vhd_util_func_t     func;
+    char *name;
+    vhd_util_func_t func;
 };
 
 struct command commands[] = {
-	{ .name = "create",      .func = vhd_util_create        },
-	{ .name = "snapshot",    .func = vhd_util_snapshot      },
-	{ .name = "query",       .func = vhd_util_query         },
-	{ .name = "read",        .func = vhd_util_read          },
-	{ .name = "set",         .func = vhd_util_set_field     },
-	{ .name = "repair",      .func = vhd_util_repair        },
-	{ .name = "resize",      .func = vhd_util_resize        },
-	{ .name = "fill",        .func = vhd_util_fill          },
-	{ .name = "coalesce",    .func = vhd_util_coalesce      },
-	{ .name = "modify",      .func = vhd_util_modify        },
-	{ .name = "scan",        .func = vhd_util_scan          },
-	{ .name = "check",       .func = vhd_util_check         },
-	{ .name = "revert",      .func = vhd_util_revert        },
+    {.name = "create",.func = vhd_util_create},
+    {.name = "snapshot",.func = vhd_util_snapshot},
+    {.name = "query",.func = vhd_util_query},
+    {.name = "read",.func = vhd_util_read},
+    {.name = "set",.func = vhd_util_set_field},
+    {.name = "repair",.func = vhd_util_repair},
+    {.name = "resize",.func = vhd_util_resize},
+    {.name = "fill",.func = vhd_util_fill},
+    {.name = "coalesce",.func = vhd_util_coalesce},
+    {.name = "modify",.func = vhd_util_modify},
+    {.name = "scan",.func = vhd_util_scan},
+    {.name = "check",.func = vhd_util_check},
+    {.name = "revert",.func = vhd_util_revert},
 };
 
 #define print_commands()					\
@@ -82,87 +82,84 @@ struct command commands[] = {
 
 TEST_FAIL_EXTERN_VARS;
 
-void
-help(void)
+void help(void)
 {
-	printf("usage: vhd-util COMMAND [OPTIONS]\n");
-	print_commands();
-	exit(0);
+    printf("usage: vhd-util COMMAND [OPTIONS]\n");
+    print_commands();
+    exit(0);
 }
 
-struct command *
-get_command(char *command)
+struct command *get_command(char *command)
 {
-	int i, n;
+    int i, n;
 
-	if (strnlen(command, 25) >= 25)
-		return NULL;
+    if (strnlen(command, 25) >= 25)
+        return NULL;
 
-	n = sizeof(commands) / sizeof (struct command);
+    n = sizeof(commands) / sizeof(struct command);
 
-	for (i = 0; i < n; i++)
-		if (!strcmp(command, commands[i].name))
-			return &commands[i];
+    for (i = 0; i < n; i++)
+        if (!strcmp(command, commands[i].name))
+            return &commands[i];
 
-	return NULL;
+    return NULL;
 }
 
-int
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
-	char **cargv;
-	struct command *cmd;
-	int cargc, i, cnt, ret;
+    char **cargv;
+    struct command *cmd;
+    int cargc, i, cnt, ret;
 
 #ifdef CORE_DUMP
-	#include <sys/resource.h>
-	struct rlimit rlim;
-	rlim.rlim_cur = RLIM_INFINITY;
-	rlim.rlim_max = RLIM_INFINITY;
-	if (setrlimit(RLIMIT_CORE, &rlim) < 0)
-		fprintf(stderr, "setrlimit failed: %d\n", errno);
+#include <sys/resource.h>
+    struct rlimit rlim;
+    rlim.rlim_cur = RLIM_INFINITY;
+    rlim.rlim_max = RLIM_INFINITY;
+    if (setrlimit(RLIMIT_CORE, &rlim) < 0)
+        fprintf(stderr, "setrlimit failed: %d\n", errno);
 #endif
 
-	ret = 0;
+    ret = 0;
 
-	if (argc < 2)
-		help();
+    if (argc < 2)
+        help();
 
-	cargc = argc - 1;
-	cmd   = get_command(argv[1]);
-	if (!cmd) {
-		fprintf(stderr, "invalid COMMAND %s\n", argv[1]);
-		help();
-	}
+    cargc = argc - 1;
+    cmd = get_command(argv[1]);
+    if (!cmd) {
+        fprintf(stderr, "invalid COMMAND %s\n", argv[1]);
+        help();
+    }
 
-	cargv = malloc(sizeof(char *) * cargc);
-	if (!cargv)
-		exit(ENOMEM);
+    cargv = malloc(sizeof(char *) * cargc);
+    if (!cargv)
+        exit(ENOMEM);
 
-	cnt      = 1;
-	cargv[0] = cmd->name;
-	for (i = 1; i < cargc; i++) {
-		char *arg = argv[i + (argc - cargc)];
+    cnt = 1;
+    cargv[0] = cmd->name;
+    for (i = 1; i < cargc; i++) {
+        char *arg = argv[i + (argc - cargc)];
 
-		if (!strcmp(arg, "--debug")) {
-			libvhd_set_log_level(1);
-			continue;
-		}
+        if (!strcmp(arg, "--debug")) {
+            libvhd_set_log_level(1);
+            continue;
+        }
 
-		cargv[cnt++] = arg;
-	}
+        cargv[cnt++] = arg;
+    }
 
 #ifdef ENABLE_FAILURE_TESTING
-	for (i = 0; i < NUM_FAIL_TESTS; i++) {
-		TEST_FAIL[i] = 0;
-		if (getenv(ENV_VAR_FAIL[i]))
-			TEST_FAIL[i] = 1;
-	}
-#endif // ENABLE_FAILURE_TESTING
+    for (i = 0; i < NUM_FAIL_TESTS; i++) {
+        TEST_FAIL[i] = 0;
+        if (getenv(ENV_VAR_FAIL[i]))
+            TEST_FAIL[i] = 1;
+    }
+#endif                          // ENABLE_FAILURE_TESTING
 
-	ret = cmd->func(cnt, cargv);
+    ret = cmd->func(cnt, cargv);
 
-	free(cargv);
+    free(cargv);
 
-	return (ret >= 0 ? ret : -ret);
+    return (ret >= 0 ? ret : -ret);
 }

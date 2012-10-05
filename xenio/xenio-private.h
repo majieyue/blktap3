@@ -25,27 +25,27 @@ TAILQ_HEAD(tqh_xenio_blkif, xenio_blkif);
  * TODO XEN I/O context?
  */
 struct xenio_ctx {
-	/**
+    /**
 	 * TODO grant table handle?
 	 */
-	xc_gnttab				*xcg_handle;
+    xc_gnttab *xcg_handle;
 
-	/**
+    /**
 	 * TODO event channel handle?
 	 */
-	xc_evtchn				*xce_handle;
+    xc_evtchn *xce_handle;
 
-	/**
+    /**
 	 * List of XEN I/O block interfaces.
 	 */
-	struct tqh_xenio_blkif	ifs;
+    struct tqh_xenio_blkif ifs;
 };
 
 #include <stdlib.h>
 #include <syslog.h>
 
 void xenio_log(int prio, const char *fmt, ...);
-void (*xenio_vlog)(int prio, const char *fmt, va_list ap);
+void (*xenio_vlog) (int prio, const char *fmt, va_list ap);
 
 #define DBG(_fmt, _args...)  xenio_log(LOG_DEBUG, "%s:%d "_fmt, __FILE__, \
 		__LINE__, ##_args)
@@ -53,4 +53,4 @@ void (*xenio_vlog)(int prio, const char *fmt, va_list ap);
 #define WARN(_fmt, _args...) xenio_log(LOG_WARNING, "%s:%d "_fmt, __FILE__, \
 		__LINE__, ##_args)
 
-#endif /* __XENIO_PRIVATE_H__ */
+#endif                          /* __XENIO_PRIVATE_H__ */

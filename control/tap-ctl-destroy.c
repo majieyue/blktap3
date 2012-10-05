@@ -28,17 +28,17 @@
 
 int
 tap_ctl_destroy(const int id, const int minor,
-		int force, struct timeval *timeout)
+                int force, struct timeval *timeout)
 {
-	int err;
+    int err;
 
-	err = tap_ctl_close(id, minor, 0, timeout);
-	if (err)
-		return err;
+    err = tap_ctl_close(id, minor, 0, timeout);
+    if (err)
+        return err;
 
-	err = tap_ctl_detach(id, minor);
-	if (err)
-		return err;
+    err = tap_ctl_detach(id, minor);
+    if (err)
+        return err;
 
-	return 0;
+    return 0;
 }

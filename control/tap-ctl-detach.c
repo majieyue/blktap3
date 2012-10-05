@@ -24,29 +24,28 @@
 
 #include "tap-ctl.h"
 
-int
-tap_ctl_detach(const int id, const int minor)
+int tap_ctl_detach(const int id, const int minor)
 {
-	int err;
-	tapdisk_message_t message;
+    int err;
+    tapdisk_message_t message;
 
-	memset(&message, 0, sizeof(message));
-	message.type = TAPDISK_MESSAGE_DETACH;
-	message.cookie = minor;
+    memset(&message, 0, sizeof(message));
+    message.type = TAPDISK_MESSAGE_DETACH;
+    message.cookie = minor;
 
-	err = tap_ctl_connect_send_and_receive(id, &message, NULL);
-	if (err)
-		return err;
+    err = tap_ctl_connect_send_and_receive(id, &message, NULL);
+    if (err)
+        return err;
 
-	if (message.type == TAPDISK_MESSAGE_DETACH_RSP) {
-		err = message.u.response.error;
-		if (err < 0)
-			printf("detach failed: %d\n", err);
-	} else {
-		printf("got unexpected result '%s' from %d\n",
-		       tapdisk_message_name(message.type), id);
-		err = EINVAL;
-	}
+    if (message.type == TAPDISK_MESSAGE_DETACH_RSP) {
+        err = message.u.response.error;
+        if (err < 0)
+            printf("detach failed: %d\n", err);
+    } else {
+        printf("got unexpected result '%s' from %d\n",
+               tapdisk_message_name(message.type), id);
+        err = EINVAL;
+    }
 
-	return err;
+    return err;
 }

@@ -58,41 +58,41 @@
  * The second half begins with 1 page for read request descriptors,
  * followed by a big area for supplying read data.
  */
-static inline void* bmstart(void* shm)
+static inline void *bmstart(void *shm)
 {
-  return shm;
+    return shm;
 }
 
-static inline void* bmend(void* shm)
+static inline void *bmend(void *shm)
 {
-  return shm + SHMSIZE/2;
+    return shm + SHMSIZE / 2;
 }
 
-static inline void* sringstart(void* shm)
+static inline void *sringstart(void *shm)
 {
-  return bmend(shm);
+    return bmend(shm);
 }
 
-static inline void* sdatastart(void* shm)
+static inline void *sdatastart(void *shm)
 {
-  return sringstart(shm) + SRINGSIZE;
+    return sringstart(shm) + SRINGSIZE;
 }
 
-static inline void* sdataend(void* shm)
+static inline void *sdataend(void *shm)
 {
-  return shm + SHMSIZE;
+    return shm + SHMSIZE;
 }
 
 /* format for messages between log client and server */
 struct log_ctlmsg {
-  char msg[4];
-  char params[16];
+    char msg[4];
+    char params[16];
 };
 
 /* extent descriptor */
 struct disk_range {
-  uint64_t sector;
-  uint32_t count;
+    uint64_t sector;
+    uint32_t count;
 };
 
 /* dirty write logging space. This is an extent ring at the front,
@@ -103,9 +103,9 @@ struct disk_range {
  * header */
 
 struct log_extent {
-  uint64_t sector;
-  uint32_t count;
-  uint32_t offset; /* offset from start of data area to start of extent */
+    uint64_t sector;
+    uint32_t count;
+    uint32_t offset;            /* offset from start of data area to start of extent */
 };
 
 /* struct above should be 16 bytes, or 256 extents/page */

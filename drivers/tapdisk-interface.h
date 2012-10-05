@@ -47,9 +47,9 @@ void td_debug(td_image_t *);
 
 void td_queue_tiocb(td_driver_t *, struct tiocb *);
 void td_prep_read(struct tiocb *, int, char *, size_t,
-		  long long, td_queue_callback_t, void *);
+                  long long, td_queue_callback_t, void *);
 void td_prep_write(struct tiocb *, int, char *, size_t,
-		   long long, td_queue_callback_t, void *);
-void td_panic(void) __attribute__((noreturn));
+                   long long, td_queue_callback_t, void *);
+void td_panic(void) __attribute__ ((noreturn));
 
 #endif

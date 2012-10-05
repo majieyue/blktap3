@@ -57,310 +57,297 @@
 #define scheduler_for_each_event_safe(s, event, tmp)	\
 	TAILQ_FOREACH_SAFE(event,&(s)->events, entry, tmp)
 
-static void
-scheduler_prepare_events(scheduler_t *s)
+static void scheduler_prepare_events(scheduler_t * s)
 {
-	int diff;
-	struct timeval now;
-	event_t *event;
+    int diff;
+    struct timeval now;
+    event_t *event;
 
-	FD_ZERO(&s->read_fds);
-	FD_ZERO(&s->write_fds);
-	FD_ZERO(&s->except_fds);
+    FD_ZERO(&s->read_fds);
+    FD_ZERO(&s->write_fds);
+    FD_ZERO(&s->except_fds);
 
-	s->max_fd  = -1;
-	s->timeout = SCHEDULER_MAX_TIMEOUT;
+    s->max_fd = -1;
+    s->timeout = SCHEDULER_MAX_TIMEOUT;
 
-	gettimeofday(&now, NULL);
+    gettimeofday(&now, NULL);
 
-	scheduler_for_each_event(s, event) {
-		if (event->masked || event->dead)
-			continue;
+    scheduler_for_each_event(s, event) {
+        if (event->masked || event->dead)
+            continue;
 
-		if (event->mode & SCHEDULER_POLL_READ_FD) {
-			FD_SET(event->fd, &s->read_fds);
-			s->max_fd = MAX(event->fd, s->max_fd);
-		}
+        if (event->mode & SCHEDULER_POLL_READ_FD) {
+            FD_SET(event->fd, &s->read_fds);
+            s->max_fd = MAX(event->fd, s->max_fd);
+        }
 
-		if (event->mode & SCHEDULER_POLL_WRITE_FD) {
-			FD_SET(event->fd, &s->write_fds);
-			s->max_fd = MAX(event->fd, s->max_fd);
-		}
+        if (event->mode & SCHEDULER_POLL_WRITE_FD) {
+            FD_SET(event->fd, &s->write_fds);
+            s->max_fd = MAX(event->fd, s->max_fd);
+        }
 
-		if (event->mode & SCHEDULER_POLL_EXCEPT_FD) {
-			FD_SET(event->fd, &s->except_fds);
-			s->max_fd = MAX(event->fd, s->max_fd);
-		}
+        if (event->mode & SCHEDULER_POLL_EXCEPT_FD) {
+            FD_SET(event->fd, &s->except_fds);
+            s->max_fd = MAX(event->fd, s->max_fd);
+        }
 
-		if (event->mode & SCHEDULER_POLL_TIMEOUT) {
-			diff = event->deadline - now.tv_sec;
-			if (diff > 0)
-				s->timeout = MIN(s->timeout, diff);
-			else
-				s->timeout = 0;
-		}
-	}
+        if (event->mode & SCHEDULER_POLL_TIMEOUT) {
+            diff = event->deadline - now.tv_sec;
+            if (diff > 0)
+                s->timeout = MIN(s->timeout, diff);
+            else
+                s->timeout = 0;
+        }
+    }
 
-	s->timeout = MIN(s->timeout, s->max_timeout);
+    s->timeout = MIN(s->timeout, s->max_timeout);
 }
 
-static int
-scheduler_check_fd_events(scheduler_t *s, int nfds)
+static int scheduler_check_fd_events(scheduler_t * s, int nfds)
 {
-	event_t *event;
+    event_t *event;
 
-	scheduler_for_each_event(s, event) {
-		if (!nfds)
-			break;
+    scheduler_for_each_event(s, event) {
+        if (!nfds)
+            break;
 
-		if (event->dead)
-			continue;
+        if (event->dead)
+            continue;
 
-		if ((event->mode & SCHEDULER_POLL_READ_FD) &&
-		    FD_ISSET(event->fd, &s->read_fds)) {
-			FD_CLR(event->fd, &s->read_fds);
-			event->pending |= SCHEDULER_POLL_READ_FD;
-			--nfds;
-		}
+        if ((event->mode & SCHEDULER_POLL_READ_FD) &&
+            FD_ISSET(event->fd, &s->read_fds)) {
+            FD_CLR(event->fd, &s->read_fds);
+            event->pending |= SCHEDULER_POLL_READ_FD;
+            --nfds;
+        }
 
-		if ((event->mode & SCHEDULER_POLL_WRITE_FD) &&
-		    FD_ISSET(event->fd, &s->write_fds)) {
-			FD_CLR(event->fd, &s->write_fds);
-			event->pending |= SCHEDULER_POLL_WRITE_FD;
-			--nfds;
-		}
+        if ((event->mode & SCHEDULER_POLL_WRITE_FD) &&
+            FD_ISSET(event->fd, &s->write_fds)) {
+            FD_CLR(event->fd, &s->write_fds);
+            event->pending |= SCHEDULER_POLL_WRITE_FD;
+            --nfds;
+        }
 
-		if ((event->mode & SCHEDULER_POLL_EXCEPT_FD) &&
-		    FD_ISSET(event->fd, &s->except_fds)) {
-			FD_CLR(event->fd, &s->except_fds);
-			event->pending |= SCHEDULER_POLL_EXCEPT_FD;
-			--nfds;
-		}
-	}
+        if ((event->mode & SCHEDULER_POLL_EXCEPT_FD) &&
+            FD_ISSET(event->fd, &s->except_fds)) {
+            FD_CLR(event->fd, &s->except_fds);
+            event->pending |= SCHEDULER_POLL_EXCEPT_FD;
+            --nfds;
+        }
+    }
 
-	return nfds;
+    return nfds;
 }
 
-static void
-scheduler_check_timeouts(scheduler_t *s)
+static void scheduler_check_timeouts(scheduler_t * s)
 {
-	struct timeval now;
-	event_t *event;
+    struct timeval now;
+    event_t *event;
 
-	gettimeofday(&now, NULL);
+    gettimeofday(&now, NULL);
 
-	scheduler_for_each_event(s, event) {
-		BUG_ON(event->pending && event->masked);
+    scheduler_for_each_event(s, event) {
+        BUG_ON(event->pending && event->masked);
 
-		if (event->dead)
-			continue;
+        if (event->dead)
+            continue;
 
-		if (event->pending)
-			continue;
+        if (event->pending)
+            continue;
 
-		if (!(event->mode & SCHEDULER_POLL_TIMEOUT))
-			continue;
+        if (!(event->mode & SCHEDULER_POLL_TIMEOUT))
+            continue;
 
-		if (event->deadline > now.tv_sec)
-			continue;
+        if (event->deadline > now.tv_sec)
+            continue;
 
-		event->pending = SCHEDULER_POLL_TIMEOUT;
-	}
+        event->pending = SCHEDULER_POLL_TIMEOUT;
+    }
 }
 
-static int
-scheduler_check_events(scheduler_t *s, int nfds)
+static int scheduler_check_events(scheduler_t * s, int nfds)
 {
-	if (nfds)
-		nfds = scheduler_check_fd_events(s, nfds);
+    if (nfds)
+        nfds = scheduler_check_fd_events(s, nfds);
 
-	scheduler_check_timeouts(s);
+    scheduler_check_timeouts(s);
 
-	return nfds;
+    return nfds;
 }
 
-static void
-scheduler_event_callback(event_t *event, char mode)
+static void scheduler_event_callback(event_t * event, char mode)
 {
-	if (event->mode & SCHEDULER_POLL_TIMEOUT) {
-		struct timeval now;
-		gettimeofday(&now, NULL);
-		event->deadline = now.tv_sec + event->timeout;
-	}
+    if (event->mode & SCHEDULER_POLL_TIMEOUT) {
+        struct timeval now;
+        gettimeofday(&now, NULL);
+        event->deadline = now.tv_sec + event->timeout;
+    }
 
-	if (!event->masked)
-		event->cb(event->id, mode, event->private);
+    if (!event->masked)
+        event->cb(event->id, mode, event->private);
 }
 
-static int
-scheduler_run_events(scheduler_t *s)
+static int scheduler_run_events(scheduler_t * s)
 {
-	event_t *event;
-	int n_dispatched = 0;
+    event_t *event;
+    int n_dispatched = 0;
 
-	scheduler_for_each_event(s, event) {
-		char pending;
+    scheduler_for_each_event(s, event) {
+        char pending;
 
-		if (event->dead)
-			continue;
+        if (event->dead)
+            continue;
 
-		pending = event->pending;
-		if (pending) {
-			event->pending = 0;
-			/* NB. must clear before cb */
-			scheduler_event_callback(event, pending);
-			n_dispatched++;
-		}
-	}
+        pending = event->pending;
+        if (pending) {
+            event->pending = 0;
+            /* NB. must clear before cb */
+            scheduler_event_callback(event, pending);
+            n_dispatched++;
+        }
+    }
 
-	return n_dispatched;
+    return n_dispatched;
 }
 
 int
-scheduler_register_event(scheduler_t *s, char mode, int fd,
-			 int timeout, event_cb_t cb, void *private)
+scheduler_register_event(scheduler_t * s, char mode, int fd,
+                         int timeout, event_cb_t cb, void *private)
 {
-	event_t *event;
-	struct timeval now;
+    event_t *event;
+    struct timeval now;
 
-	if (!cb)
-		return -EINVAL;
+    if (!cb)
+        return -EINVAL;
 
-	if (!(mode & SCHEDULER_POLL_TIMEOUT) && !(mode & SCHEDULER_POLL_FD))
-		return -EINVAL;
+    if (!(mode & SCHEDULER_POLL_TIMEOUT) && !(mode & SCHEDULER_POLL_FD))
+        return -EINVAL;
 
-	event = calloc(1, sizeof(event_t));
-	if (!event)
-		return -ENOMEM;
+    event = calloc(1, sizeof(event_t));
+    if (!event)
+        return -ENOMEM;
 
-	gettimeofday(&now, NULL);
+    gettimeofday(&now, NULL);
 
-	//FIXME
-	//INIT_LIST_HEAD(&event->next);
+    //FIXME
+    //INIT_LIST_HEAD(&event->next);
 
-	event->mode     = mode;
-	event->fd       = fd;
-	event->timeout  = timeout;
-	event->deadline = now.tv_sec + timeout;
-	event->cb       = cb;
-	event->private  = private;
-	event->id       = s->uuid++;
-	event->masked   = 0;
+    event->mode = mode;
+    event->fd = fd;
+    event->timeout = timeout;
+    event->deadline = now.tv_sec + timeout;
+    event->cb = cb;
+    event->private = private;
+    event->id = s->uuid++;
+    event->masked = 0;
 
-	if (!s->uuid)
-		s->uuid++;
+    if (!s->uuid)
+        s->uuid++;
 
-	TAILQ_INSERT_TAIL(&s->events, event, entry);
+    TAILQ_INSERT_TAIL(&s->events, event, entry);
 
-	return event->id;
+    return event->id;
 }
 
-void
-scheduler_unregister_event(scheduler_t *s, event_id_t id)
+void scheduler_unregister_event(scheduler_t * s, event_id_t id)
 {
-	event_t *event;
+    event_t *event;
 
-	if (!id)
-		return;
+    if (!id)
+        return;
 
-	scheduler_for_each_event(s, event)
-		if (event->id == id) {
-			event->dead = 1;
-			break;
-		}
+    scheduler_for_each_event(s, event)
+        if (event->id == id) {
+        event->dead = 1;
+        break;
+    }
 }
 
-void
-scheduler_mask_event(scheduler_t *s, event_id_t id, int masked)
+void scheduler_mask_event(scheduler_t * s, event_id_t id, int masked)
 {
-	event_t *event;
+    event_t *event;
 
-	if (!id)
-		return;
+    if (!id)
+        return;
 
-	scheduler_for_each_event(s, event)
-		if (event->id == id) {
-			event->masked = !!masked;
-			break;
-		}
+    scheduler_for_each_event(s, event)
+        if (event->id == id) {
+        event->masked = ! !masked;
+        break;
+    }
 }
 
-static void
-scheduler_gc_events(scheduler_t *s)
+static void scheduler_gc_events(scheduler_t * s)
 {
-	event_t *event, *next;
+    event_t *event, *next;
 
-	scheduler_for_each_event_safe(s, event, next)
-		if (event->dead) {
-			TAILQ_REMOVE(&s->events, event, entry);
-			free(event);
-		}
+    scheduler_for_each_event_safe(s, event, next)
+        if (event->dead) {
+        TAILQ_REMOVE(&s->events, event, entry);
+        free(event);
+    }
 }
 
-void
-scheduler_set_max_timeout(scheduler_t *s, int timeout)
+void scheduler_set_max_timeout(scheduler_t * s, int timeout)
 {
-	if (timeout >= 0)
-		s->max_timeout = MIN(s->max_timeout, timeout);
+    if (timeout >= 0)
+        s->max_timeout = MIN(s->max_timeout, timeout);
 }
 
-int
-scheduler_wait_for_events(scheduler_t *s)
+int scheduler_wait_for_events(scheduler_t * s)
 {
-	int ret;
-	struct timeval tv;
+    int ret;
+    struct timeval tv;
 
-	s->depth++;
-	ret = 0;
+    s->depth++;
+    ret = 0;
 
-	if (s->depth > 1 && scheduler_run_events(s))
-		/* NB. recursive invocations continue with the pending
-		 * event set. We return as soon as we made some
-		 * progress. */
-		goto out;
+    if (s->depth > 1 && scheduler_run_events(s))
+        /* NB. recursive invocations continue with the pending
+         * event set. We return as soon as we made some
+         * progress. */
+        goto out;
 
-	scheduler_prepare_events(s);
+    scheduler_prepare_events(s);
 
-	tv.tv_sec  = s->timeout;
-	tv.tv_usec = 0;
+    tv.tv_sec = s->timeout;
+    tv.tv_usec = 0;
 
-	DBG("timeout: %d, max_timeout: %d\n",
-	    s->timeout, s->max_timeout);
+    DBG("timeout: %d, max_timeout: %d\n", s->timeout, s->max_timeout);
 
-	ret = select(s->max_fd + 1, &s->read_fds,
-		     &s->write_fds, &s->except_fds, &tv);
+    ret = select(s->max_fd + 1, &s->read_fds,
+                 &s->write_fds, &s->except_fds, &tv);
 
-	if (ret < 0)
-		goto out;
+    if (ret < 0)
+        goto out;
 
-	ret = scheduler_check_events(s, ret);
-	BUG_ON(ret);
+    ret = scheduler_check_events(s, ret);
+    BUG_ON(ret);
 
-	s->timeout     = SCHEDULER_MAX_TIMEOUT;
-	s->max_timeout = SCHEDULER_MAX_TIMEOUT;
+    s->timeout = SCHEDULER_MAX_TIMEOUT;
+    s->max_timeout = SCHEDULER_MAX_TIMEOUT;
 
-	scheduler_run_events(s);
+    scheduler_run_events(s);
 
-	if (s->depth == 1)
-		scheduler_gc_events(s);
+    if (s->depth == 1)
+        scheduler_gc_events(s);
 
-out:
-	s->depth--;
+  out:
+    s->depth--;
 
-	return ret;
+    return ret;
 }
 
-void
-scheduler_initialize(scheduler_t *s)
+void scheduler_initialize(scheduler_t * s)
 {
-	memset(s, 0, sizeof(scheduler_t));
+    memset(s, 0, sizeof(scheduler_t));
 
-	s->uuid  = 1;
-	s->depth = 0;
+    s->uuid = 1;
+    s->depth = 0;
 
-	FD_ZERO(&s->read_fds);
-	FD_ZERO(&s->write_fds);
-	FD_ZERO(&s->except_fds);
+    FD_ZERO(&s->read_fds);
+    FD_ZERO(&s->write_fds);
+    FD_ZERO(&s->except_fds);
 
-	TAILQ_INIT(&s->events);
+    TAILQ_INIT(&s->events);
 }

@@ -48,12 +48,12 @@
 #define DISK_TYPE_NAME_MAX    32
 
 typedef struct disk_info {
-	const char     *name; /* driver name, e.g. 'aio' */
-	char           *desc;  /* e.g. "raw image" */
-	unsigned int    flags; 
+    const char *name;           /* driver name, e.g. 'aio' */
+    char *desc;                 /* e.g. "raw image" */
+    unsigned int flags;
 } disk_info_t;
 
-extern const disk_info_t     *tapdisk_disk_types[];
+extern const disk_info_t *tapdisk_disk_types[];
 extern const struct tap_disk *tapdisk_disk_drivers[];
 
 /* one single controller for all instances of disk type */

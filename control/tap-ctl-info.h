@@ -16,6 +16,6 @@
 #define __TAP_CTL_INFO_H__
 
 int tap_ctl_info(pid_t pid, int minor, unsigned long long *sectors,
-		unsigned int *sector_size, unsigned int *info);
+                 unsigned int *sector_size, unsigned int *info);
 
-#endif /* __TAP_CTL_INFO_H__ */
+#endif                          /* __TAP_CTL_INFO_H__ */

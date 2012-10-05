@@ -36,51 +36,51 @@
 #define SCHEDULER_POLL_EXCEPT_FD     0x4
 #define SCHEDULER_POLL_TIMEOUT       0x8
 
-typedef int                          event_id_t;
-typedef void (*event_cb_t)          (event_id_t id, char mode, void *private);
+typedef int event_id_t;
+typedef void (*event_cb_t) (event_id_t id, char mode, void *private);
 
 typedef struct event {
-	char                         mode;
-	char                         dead;
-	char                         pending;
-	char                         masked;
+    char mode;
+    char dead;
+    char pending;
+    char masked;
 
-	event_id_t                   id;
+    event_id_t id;
 
-	int                          fd;
-	int                          timeout;
-	int                          deadline;
+    int fd;
+    int timeout;
+    int deadline;
 
-	event_cb_t                   cb;
-	void                        *private;
+    event_cb_t cb;
+    void *private;
 
-	/*
-	 * for linked lists
-	 */
-	TAILQ_ENTRY(event)           entry;
+    /*
+     * for linked lists
+     */
+     TAILQ_ENTRY(event) entry;
 } event_t;
 
 TAILQ_HEAD(tqh_event, event);
 
 typedef struct scheduler {
-	fd_set                       read_fds;
-	fd_set                       write_fds;
-	fd_set                       except_fds;
+    fd_set read_fds;
+    fd_set write_fds;
+    fd_set except_fds;
 
-	struct tqh_event			 events;
+    struct tqh_event events;
 
-	int                          uuid;
-	int                          max_fd;
-	int                          timeout;
-	int                          max_timeout;
-	int                          depth;
+    int uuid;
+    int max_fd;
+    int timeout;
+    int max_timeout;
+    int depth;
 } scheduler_t;
 
 void scheduler_initialize(scheduler_t *);
 event_id_t scheduler_register_event(scheduler_t *, char mode,
-				    int fd, int timeout,
-				    event_cb_t cb, void *private);
-void scheduler_unregister_event(scheduler_t *,  event_id_t);
+                                    int fd, int timeout,
+                                    event_cb_t cb, void *private);
+void scheduler_unregister_event(scheduler_t *, event_id_t);
 void scheduler_mask_event(scheduler_t *, event_id_t, int masked);
 void scheduler_set_max_timeout(scheduler_t *, int);
 int scheduler_wait_for_events(scheduler_t *);

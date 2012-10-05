@@ -38,113 +38,113 @@
 #include "tapdisk-disktype.h"
 
 static const disk_info_t aio_disk = {
-       "aio",
-       "raw image (aio)",
-       0,
+    "aio",
+    "raw image (aio)",
+    0,
 };
 
 static const disk_info_t sync_disk = {
-       "sync",
-       "raw image (sync)",
-       0,
+    "sync",
+    "raw image (sync)",
+    0,
 };
 
 static const disk_info_t vmdk_disk = {
-       "vmdk",
-       "vmware image (vmdk)",
-       1,
+    "vmdk",
+    "vmware image (vmdk)",
+    1,
 };
 
 static const disk_info_t vhdsync_disk = {
-       "vhdsync",
-       "virtual server image (vhd) - synchronous",
-       1,
+    "vhdsync",
+    "virtual server image (vhd) - synchronous",
+    1,
 };
 
 static const disk_info_t vhd_disk = {
-       "vhd",
-       "virtual server image (vhd)",
-       0,
+    "vhd",
+    "virtual server image (vhd)",
+    0,
 };
 
 
 static const disk_info_t ram_disk = {
-       "ram",
-       "ramdisk image (ram)",
-       1,
+    "ram",
+    "ramdisk image (ram)",
+    1,
 };
 
 static const disk_info_t qcow_disk = {
-       "qcow",
-       "qcow disk (qcow)",
-       0,
+    "qcow",
+    "qcow disk (qcow)",
+    0,
 };
 
 static const disk_info_t block_cache_disk = {
-       "bc",
-       "block cache image (bc)",
-       1,
+    "bc",
+    "block cache image (bc)",
+    1,
 };
 
 static const disk_info_t vhd_index_disk = {
-       "vhdi",
-       "vhd index image (vhdi)",
-       1,
+    "vhdi",
+    "vhd index image (vhdi)",
+    1,
 };
 
 static const disk_info_t log_disk = {
-	"log",
-	"write logger (log)",
-	DISK_TYPE_FILTER,
+    "log",
+    "write logger (log)",
+    DISK_TYPE_FILTER,
 };
 
 static disk_info_t remus_disk = {
-       "remus disk replicator (remus)",
-       "remus",
-       0,
+    "remus disk replicator (remus)",
+    "remus",
+    0,
 };
 
 static const disk_info_t lcache_disk = {
-       "lc",
-       "local parent cache (lc)",
-       DISK_TYPE_FILTER,
+    "lc",
+    "local parent cache (lc)",
+    DISK_TYPE_FILTER,
 };
 
 static const disk_info_t llpcache_disk = {
-	"llp",
-	"local leaf cache, persistent (llp)",
-	0,
+    "llp",
+    "local leaf cache, persistent (llp)",
+    0,
 };
 
 static const disk_info_t llecache_disk = {
-	"lle",
-	"local leaf cache, ephemeral (lle)",
-	0,
+    "lle",
+    "local leaf cache, ephemeral (lle)",
+    0,
 };
 
 static const disk_info_t valve_disk = {
-       "valve",
-       "group rate limiting (valve)",
-       DISK_TYPE_FILTER,
+    "valve",
+    "group rate limiting (valve)",
+    DISK_TYPE_FILTER,
 };
 
 const disk_info_t *tapdisk_disk_types[] = {
-	[DISK_TYPE_AIO]	= &aio_disk,
-	[DISK_TYPE_SYNC]	= &sync_disk,
-	[DISK_TYPE_VMDK]	= &vmdk_disk,
-	[DISK_TYPE_VHDSYNC]	= &vhdsync_disk,
-	[DISK_TYPE_VHD]	= &vhd_disk,
-	[DISK_TYPE_RAM]	= &ram_disk,
-	[DISK_TYPE_QCOW]	= &qcow_disk,
-	[DISK_TYPE_BLOCK_CACHE] = &block_cache_disk,
-	[DISK_TYPE_VINDEX]	= &vhd_index_disk,
-	[DISK_TYPE_LOG]	= &log_disk,
-	[DISK_TYPE_REMUS]	= &remus_disk,
-	[DISK_TYPE_LCACHE]      = &lcache_disk,
-	[DISK_TYPE_VALVE]       = &valve_disk,
-	[DISK_TYPE_LLPCACHE]    = &llpcache_disk,
-	[DISK_TYPE_LLECACHE]    = &llecache_disk,
-	0,
+    [DISK_TYPE_AIO] = &aio_disk,
+    [DISK_TYPE_SYNC] = &sync_disk,
+    [DISK_TYPE_VMDK] = &vmdk_disk,
+    [DISK_TYPE_VHDSYNC] = &vhdsync_disk,
+    [DISK_TYPE_VHD] = &vhd_disk,
+    [DISK_TYPE_RAM] = &ram_disk,
+    [DISK_TYPE_QCOW] = &qcow_disk,
+    [DISK_TYPE_BLOCK_CACHE] = &block_cache_disk,
+    [DISK_TYPE_VINDEX] = &vhd_index_disk,
+    [DISK_TYPE_LOG] = &log_disk,
+    [DISK_TYPE_REMUS] = &remus_disk,
+    [DISK_TYPE_LCACHE] = &lcache_disk,
+    [DISK_TYPE_VALVE] = &valve_disk,
+    [DISK_TYPE_LLPCACHE] = &llpcache_disk,
+    [DISK_TYPE_LLECACHE] = &llecache_disk,
+    0,
 };
 
 extern struct tap_disk tapdisk_aio;
@@ -169,74 +169,72 @@ extern struct tap_disk tapdisk_llecache;
 extern struct tap_disk tapdisk_valve;
 
 const struct tap_disk *tapdisk_disk_drivers[] = {
-	[DISK_TYPE_AIO]         = &tapdisk_aio,
+    [DISK_TYPE_AIO] = &tapdisk_aio,
 #if 0
-	[DISK_TYPE_SYNC]        = &tapdisk_sync,
-	[DISK_TYPE_VMDK]        = &tapdisk_vmdk,
-	[DISK_TYPE_VHDSYNC]     = &tapdisk_vhdsync_disk
+    [DISK_TYPE_SYNC] = &tapdisk_sync,
+    [DISK_TYPE_VMDK] = &tapdisk_vmdk,
+    [DISK_TYPE_VHDSYNC] = &tapdisk_vhdsync_disk
 #endif
-	[DISK_TYPE_VHD]         = &tapdisk_vhd,
-	[DISK_TYPE_RAM]         = &tapdisk_ram,
+        [DISK_TYPE_VHD] = &tapdisk_vhd,
+    [DISK_TYPE_RAM] = &tapdisk_ram,
 #if 0
-	[DISK_TYPE_QCOW]        = &tapdisk_qcow,
+    [DISK_TYPE_QCOW] = &tapdisk_qcow,
 #endif
-	[DISK_TYPE_BLOCK_CACHE] = &tapdisk_block_cache,
-	[DISK_TYPE_VINDEX]      = &tapdisk_vhd_index,
+    [DISK_TYPE_BLOCK_CACHE] = &tapdisk_block_cache,
+    [DISK_TYPE_VINDEX] = &tapdisk_vhd_index,
 #if 0
-	[DISK_TYPE_LOG]         = &tapdisk_log,
+    [DISK_TYPE_LOG] = &tapdisk_log,
 #endif
-	[DISK_TYPE_LCACHE]      = &tapdisk_lcache,
-	[DISK_TYPE_LLPCACHE]    = &tapdisk_llpcache,
-	[DISK_TYPE_LLECACHE]    = &tapdisk_llecache,
-	[DISK_TYPE_VALVE]       = &tapdisk_valve,
-	0,
+    [DISK_TYPE_LCACHE] = &tapdisk_lcache,
+    [DISK_TYPE_LLPCACHE] = &tapdisk_llpcache,
+    [DISK_TYPE_LLECACHE] = &tapdisk_llecache,
+    [DISK_TYPE_VALVE] = &tapdisk_valve,
+    0,
 };
 
-int
-tapdisk_disktype_find(const char *name)
+int tapdisk_disktype_find(const char *name)
 {
-	int i;
+    int i;
 
-	for (i = 0; i < ARRAY_SIZE(tapdisk_disk_types); i++) {
-		const disk_info_t *info = tapdisk_disk_types[i];
+    for (i = 0; i < ARRAY_SIZE(tapdisk_disk_types); i++) {
+        const disk_info_t *info = tapdisk_disk_types[i];
 
-		if (!info)
-			continue;
+        if (!info)
+            continue;
 
-		if (strcmp(name, info->name))
-			continue;
+        if (strcmp(name, info->name))
+            continue;
 
-		if (!tapdisk_disk_drivers[i])
-			return -ENOSYS;
+        if (!tapdisk_disk_drivers[i])
+            return -ENOSYS;
 
-		return i;
-	}
+        return i;
+    }
 
-	return -ENOENT;
+    return -ENOENT;
 }
 
-int
-tapdisk_disktype_parse_params(const char *params, const char **_path)
+int tapdisk_disktype_parse_params(const char *params, const char **_path)
 {
-	char name[DISK_TYPE_NAME_MAX], *ptr;
-	size_t len;
-	int type;
+    char name[DISK_TYPE_NAME_MAX], *ptr;
+    size_t len;
+    int type;
 
-	ptr = strchr(params, ':');
-	if (!ptr)
-		return -EINVAL;
+    ptr = strchr(params, ':');
+    if (!ptr)
+        return -EINVAL;
 
-	len = ptr - params;
+    len = ptr - params;
 
-	if (len > sizeof(name) - 1)
-		return -ENAMETOOLONG;
+    if (len > sizeof(name) - 1)
+        return -ENAMETOOLONG;
 
-	memset(name, 0, sizeof(name));
-	strncpy(name, params, len);
+    memset(name, 0, sizeof(name));
+    strncpy(name, params, len);
 
-	type = tapdisk_disktype_find(name);
+    type = tapdisk_disktype_find(name);
 
-	*_path = params + len + 1;
+    *_path = params + len + 1;
 
-	return type;
+    return type;
 }

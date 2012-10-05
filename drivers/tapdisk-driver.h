@@ -37,21 +37,21 @@
 #define TD_DRIVER_RDONLY             0x0002
 
 struct td_driver_handle {
-	int                          type;
-	char                        *name;
+    int type;
+    char *name;
 
-	int                          storage;
+    int storage;
 
-	int                          refcnt;
-	td_flag_t                    state;
+    int refcnt;
+    td_flag_t state;
 
-	td_disk_info_t               info;
+    td_disk_info_t info;
 
-	void                        *data;
-	const struct tap_disk       *ops;
+    void *data;
+    const struct tap_disk *ops;
 
-	td_loglimit_t                loglimit;
-	TAILQ_ENTRY(td_driver_handle)	next;
+    td_loglimit_t loglimit;
+     TAILQ_ENTRY(td_driver_handle) next;
 };
 
 td_driver_t *tapdisk_driver_allocate(int, const char *, td_flag_t);

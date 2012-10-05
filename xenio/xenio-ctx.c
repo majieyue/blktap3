@@ -21,57 +21,56 @@
 #include "xenio.h"
 #include "xenio-private.h"
 
-void xenio_close(xenio_ctx_t *ctx)
+void xenio_close(xenio_ctx_t * ctx)
 {
-	if (ctx->xce_handle != NULL) {
-		xc_evtchn_close(ctx->xce_handle);
-		ctx->xce_handle = NULL;
-	}
+    if (ctx->xce_handle != NULL) {
+        xc_evtchn_close(ctx->xce_handle);
+        ctx->xce_handle = NULL;
+    }
 
-	if (ctx->xcg_handle != NULL) {
-		xc_evtchn_close(ctx->xcg_handle);
-		ctx->xcg_handle = NULL;
-	}
+    if (ctx->xcg_handle != NULL) {
+        xc_evtchn_close(ctx->xcg_handle);
+        ctx->xcg_handle = NULL;
+    }
 
-	free(ctx);
+    free(ctx);
 }
 
-xenio_ctx_t* xenio_open(void)
+xenio_ctx_t *xenio_open(void)
 {
-	xenio_ctx_t *ctx;
-	int err;
+    xenio_ctx_t *ctx;
+    int err;
 
-	ctx = calloc(1, sizeof(*ctx));
-	if (!ctx) {
-		err = -errno;
-		goto fail;
-	}
-	TAILQ_INIT(&ctx->ifs);
+    ctx = calloc(1, sizeof(*ctx));
+    if (!ctx) {
+        err = -errno;
+        goto fail;
+    }
+    TAILQ_INIT(&ctx->ifs);
 
-	ctx->xce_handle = xc_evtchn_open(NULL, 0);
-	if (ctx->xce_handle == NULL) {
-		err = -errno;
-		goto fail;
-	}
+    ctx->xce_handle = xc_evtchn_open(NULL, 0);
+    if (ctx->xce_handle == NULL) {
+        err = -errno;
+        goto fail;
+    }
 
-	ctx->xcg_handle = xc_gnttab_open(NULL, 0);
-	if (ctx->xcg_handle == NULL) {
-		err = -errno;
-		goto fail;
-	}
+    ctx->xcg_handle = xc_gnttab_open(NULL, 0);
+    if (ctx->xcg_handle == NULL) {
+        err = -errno;
+        goto fail;
+    }
 
-	return ctx;
+    return ctx;
 
-fail:
-	if (ctx)
-		xenio_close(ctx);
-	errno = -err;
+  fail:
+    if (ctx)
+        xenio_close(ctx);
+    errno = -err;
 
-	return NULL;
+    return NULL;
 }
 
-int
-xenio_event_fd(xenio_ctx_t *ctx)
+int xenio_event_fd(xenio_ctx_t * ctx)
 {
-	return xc_evtchn_fd(ctx->xce_handle);
+    return xc_evtchn_fd(ctx->xce_handle);
 }

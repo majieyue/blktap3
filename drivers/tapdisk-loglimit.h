@@ -34,17 +34,17 @@
 typedef struct td_loglimit td_loglimit_t;
 
 struct td_loglimit {
-	int burst;
-	int interval;
+    int burst;
+    int interval;
 
-	int count;
-	int dropped;
+    int count;
+    int dropped;
 
-	struct timeval ts;
+    struct timeval ts;
 };
 
-void tapdisk_loglimit_init(td_loglimit_t *rl, int burst, int interval);
+void tapdisk_loglimit_init(td_loglimit_t * rl, int burst, int interval);
 
 int tapdisk_loglimit_pass(td_loglimit_t *);
 
-#endif /* __TAPDISK_LOGLIMIT_H__ */
+#endif                          /* __TAPDISK_LOGLIMIT_H__ */

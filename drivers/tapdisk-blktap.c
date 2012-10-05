@@ -75,99 +75,95 @@
 static void __tapdisk_blktap_close(td_blktap_t *);
 
 struct td_blktap_req {
-	td_vbd_request_t        vreq;
-	unsigned int            id;
-	char                    name[16];
-	struct td_iovec         iov[BLKTAP_SEGMENT_MAX];
+    td_vbd_request_t vreq;
+    unsigned int id;
+    char name[16];
+    struct td_iovec iov[BLKTAP_SEGMENT_MAX];
 };
 
-void
-tapdisk_blktap_free_request(td_blktap_t *tap, td_blktap_req_t *req)
+void tapdisk_blktap_free_request(td_blktap_t * tap, td_blktap_req_t * req)
 {
-	BUG_ON(tap->n_reqs_free >= tap->n_reqs);
-	tap->reqs_free[tap->n_reqs_free++] = req;
+    BUG_ON(tap->n_reqs_free >= tap->n_reqs);
+    tap->reqs_free[tap->n_reqs_free++] = req;
 }
 
-static void
-tapdisk_blktap_reqs_free(td_blktap_t *tap)
+static void tapdisk_blktap_reqs_free(td_blktap_t * tap)
 {
-	if (tap->reqs) {
-		free(tap->reqs);
-		tap->reqs = NULL;
-	}
+    if (tap->reqs) {
+        free(tap->reqs);
+        tap->reqs = NULL;
+    }
 
-	if (tap->reqs_free) {
-		free(tap->reqs_free);
-		tap->reqs_free = NULL;
-	}
+    if (tap->reqs_free) {
+        free(tap->reqs_free);
+        tap->reqs_free = NULL;
+    }
 }
 
-static int
-tapdisk_blktap_reqs_init(td_blktap_t *tap, int n_reqs)
+static int tapdisk_blktap_reqs_init(td_blktap_t * tap, int n_reqs)
 {
-	int i, err;
+    int i, err;
 
-	tap->reqs = malloc(n_reqs * sizeof(td_blktap_req_t));
-	if (!tap->reqs) {
-		err = -errno;
-		goto fail;
-	}
+    tap->reqs = malloc(n_reqs * sizeof(td_blktap_req_t));
+    if (!tap->reqs) {
+        err = -errno;
+        goto fail;
+    }
 
-	tap->reqs_free = malloc(n_reqs * sizeof(td_blktap_req_t*));
-	if (!tap->reqs_free) {
-		err = -errno;
-		goto fail;
-	}
+    tap->reqs_free = malloc(n_reqs * sizeof(td_blktap_req_t *));
+    if (!tap->reqs_free) {
+        err = -errno;
+        goto fail;
+    }
 
-	tap->n_reqs      = n_reqs;
-	tap->n_reqs_free = 0;
+    tap->n_reqs = n_reqs;
+    tap->n_reqs_free = 0;
 
-	for (i = 0; i < n_reqs; i++)
-		tapdisk_blktap_free_request(tap, &tap->reqs[i]);
+    for (i = 0; i < n_reqs; i++)
+        tapdisk_blktap_free_request(tap, &tap->reqs[i]);
 
-	return 0;
+    return 0;
 
-fail:
-	tapdisk_blktap_reqs_free(tap);
-	return err;
+  fail:
+    tapdisk_blktap_reqs_free(tap);
+    return err;
 }
 
-int
-tapdisk_blktap_remove_device(td_blktap_t *tap)
+int tapdisk_blktap_remove_device(td_blktap_t * tap)
 {
-	int err = 0;
+    int err = 0;
 
-	if (likely(tap->fd >= 0)) {
-		err = ioctl(tap->fd, BLKTAP_IOCTL_REMOVE_DEVICE);
-		if (err)
-			err = -errno;
-	}
+    if (likely(tap->fd >= 0)) {
+        err = ioctl(tap->fd, BLKTAP_IOCTL_REMOVE_DEVICE);
+        if (err)
+            err = -errno;
+    }
 
-	return err;
+    return err;
 }
 
 int
-tapdisk_blktap_compat_create_device(td_blktap_t *tap,
-				    const struct blktap_device_info *bdi)
+tapdisk_blktap_compat_create_device(td_blktap_t * tap,
+                                    const struct blktap_device_info *bdi)
 {
-	struct blktap2_params params;
-	int err;
+    struct blktap2_params params;
+    int err;
 
-	memset(&params, 0, sizeof(params));
-	params.capacity    = bdi->capacity;
-	params.sector_size = bdi->sector_size;
+    memset(&params, 0, sizeof(params));
+    params.capacity = bdi->capacity;
+    params.sector_size = bdi->sector_size;
 
-	err = ioctl(tap->fd, BLKTAP_IOCTL_CREATE_DEVICE_COMPAT, &params);
-	if (err) {
-		err = -errno;
-		return err;
-	}
+    err = ioctl(tap->fd, BLKTAP_IOCTL_CREATE_DEVICE_COMPAT, &params);
+    if (err) {
+        err = -errno;
+        return err;
+    }
 
-	if (bdi->flags || bdi->physical_sector_size != bdi->sector_size)
-		WARN("fell back to compat ioctl(%d)",
-		     BLKTAP_IOCTL_CREATE_DEVICE_COMPAT);
+    if (bdi->flags || bdi->physical_sector_size != bdi->sector_size)
+        WARN("fell back to compat ioctl(%d)",
+             BLKTAP_IOCTL_CREATE_DEVICE_COMPAT);
 
-	return 0;
+    return 0;
 }
 
 #ifndef ENOIOCTLCMD
@@ -175,124 +171,121 @@ tapdisk_blktap_compat_create_device(td_blktap_t *tap,
 #endif
 
 int
-tapdisk_blktap_create_device(td_blktap_t *tap,
-			     const td_disk_info_t *info, int rdonly)
+tapdisk_blktap_create_device(td_blktap_t * tap,
+                             const td_disk_info_t * info, int rdonly)
 {
-	struct blktap_device_info bdi;
-	unsigned long flags;
-	int err;
+    struct blktap_device_info bdi;
+    unsigned long flags;
+    int err;
 
-	memset(&bdi, 0, sizeof(bdi));
+    memset(&bdi, 0, sizeof(bdi));
 
-	flags  = 0;
-	flags |= rdonly & TD_OPEN_RDONLY ? BLKTAP_DEVICE_RO : 0;
+    flags = 0;
+    flags |= rdonly & TD_OPEN_RDONLY ? BLKTAP_DEVICE_RO : 0;
 
-	bdi.capacity             = info->size;
-	bdi.sector_size          = info->sector_size;
-	bdi.physical_sector_size = info->sector_size;
-	bdi.flags                = flags;
+    bdi.capacity = info->size;
+    bdi.sector_size = info->sector_size;
+    bdi.physical_sector_size = info->sector_size;
+    bdi.flags = flags;
 
-	INFO("bdev: capacity=%llu sector_size=%u/%u flags=%#lx",
-	     bdi.capacity, bdi.sector_size, bdi.physical_sector_size,
-	     bdi.flags);
+    INFO("bdev: capacity=%llu sector_size=%u/%u flags=%#lx",
+         bdi.capacity, bdi.sector_size, bdi.physical_sector_size,
+         bdi.flags);
 
-	err = ioctl(tap->fd, BLKTAP_IOCTL_CREATE_DEVICE, &bdi);
-	if (!err)
-		return 0;
+    err = ioctl(tap->fd, BLKTAP_IOCTL_CREATE_DEVICE, &bdi);
+    if (!err)
+        return 0;
 
-	err = -errno;
-	if (err == -ENOTTY || err == -ENOIOCTLCMD)
-		err = tapdisk_blktap_compat_create_device(tap, &bdi);
+    err = -errno;
+    if (err == -ENOTTY || err == -ENOIOCTLCMD)
+        err = tapdisk_blktap_compat_create_device(tap, &bdi);
 
-	return err;
+    return err;
 }
 
-static void
-tapdisk_blktap_unmap(td_blktap_t *tap)
+static void tapdisk_blktap_unmap(td_blktap_t * tap)
 {
-	if (tap->vma) {
-		munmap(tap->vma, tap->vma_size);
-		tap->vma = NULL;
-	}
+    if (tap->vma) {
+        munmap(tap->vma, tap->vma_size);
+        tap->vma = NULL;
+    }
 }
 
-static void
-__tapdisk_blktap_close(td_blktap_t *tap)
+static void __tapdisk_blktap_close(td_blktap_t * tap)
 {
-	/*
-	 * NB. this can bail out at runtime. after munmap, blktap
-	 * already failed all pending block reqs. AIO on buffers will
-	 * -EFAULT. vreq completion just backs off once fd/vma are
-	 * gone, so we'll drain, then idle until close().
-	 */
+    /*
+     * NB. this can bail out at runtime. after munmap, blktap
+     * already failed all pending block reqs. AIO on buffers will
+     * -EFAULT. vreq completion just backs off once fd/vma are
+     * gone, so we'll drain, then idle until close().
+     */
 
-	if (tap->event_id >= 0) {
-		tapdisk_server_unregister_event(tap->event_id);
-		tap->event_id = -1;
-	}
+    if (tap->event_id >= 0) {
+        tapdisk_server_unregister_event(tap->event_id);
+        tap->event_id = -1;
+    }
 
-	tapdisk_blktap_unmap(tap);
+    tapdisk_blktap_unmap(tap);
 
-	if (tap->fd >= 0) {
-		close(tap->fd);
-		tap->fd = -1;
-	}
+    if (tap->fd >= 0) {
+        close(tap->fd);
+        tap->fd = -1;
+    }
 }
 
-void
-tapdisk_blktap_close(td_blktap_t *tap)
+void tapdisk_blktap_close(td_blktap_t * tap)
 {
-	__tapdisk_blktap_close(tap);
-	tapdisk_blktap_reqs_free(tap);
-	free(tap);
+    __tapdisk_blktap_close(tap);
+    tapdisk_blktap_reqs_free(tap);
+    free(tap);
 }
 
 int
-tapdisk_blktap_open(const char *devname, td_vbd_t *vbd, td_blktap_t **_tap)
+tapdisk_blktap_open(const char *devname, td_vbd_t * vbd,
+                    td_blktap_t ** _tap)
 {
-	td_blktap_t *tap;
-	int err;
+    td_blktap_t *tap;
+    int err;
 
-	tap = malloc(sizeof(*tap));
-	if (!tap) {
-		err = -errno;
-		goto fail;
-	}
+    tap = malloc(sizeof(*tap));
+    if (!tap) {
+        err = -errno;
+        goto fail;
+    }
 
-	memset(tap, 0, sizeof(*tap));
-	tap->fd = -1;
-	tap->event_id = -1;
+    memset(tap, 0, sizeof(*tap));
+    tap->fd = -1;
+    tap->event_id = -1;
 
-	tap->vbd   = vbd;
+    tap->vbd = vbd;
 
-	err = tapdisk_blktap_reqs_init(tap, BLKTAP_RING_SIZE);
-	if (err)
-		goto fail;
+    err = tapdisk_blktap_reqs_init(tap, BLKTAP_RING_SIZE);
+    if (err)
+        goto fail;
 
-	if (_tap)
-		*_tap = tap;
+    if (_tap)
+        *_tap = tap;
 
-	return 0;
+    return 0;
 
-fail:
-	if (tap)
-		tapdisk_blktap_close(tap);
+  fail:
+    if (tap)
+        tapdisk_blktap_close(tap);
 
-	return err;
+    return err;
 }
 
-void
-tapdisk_blktap_stats(td_blktap_t *tap, td_stats_t *st)
+void tapdisk_blktap_stats(td_blktap_t * tap, td_stats_t * st)
 {
-	tapdisk_stats_field(st, "minor", "d", tap->minor);
+    tapdisk_stats_field(st, "minor", "d", tap->minor);
 
-	tapdisk_stats_field(st, "reqs", "[");
-	tapdisk_stats_val(st, "llu", tap->stats.reqs.in);
-	tapdisk_stats_val(st, "llu", tap->stats.reqs.out);
-	tapdisk_stats_leave(st, ']');
+    tapdisk_stats_field(st, "reqs", "[");
+    tapdisk_stats_val(st, "llu", tap->stats.reqs.in);
+    tapdisk_stats_val(st, "llu", tap->stats.reqs.out);
+    tapdisk_stats_leave(st, ']');
 
-	tapdisk_stats_field(st, "kicks", "[");
-	tapdisk_stats_val(st, "llu", tap->stats.kicks.in);
-	tapdisk_stats_val(st, "llu", tap->stats.kicks.out);
-	tapdisk_stats_leave(st, ']');
+    tapdisk_stats_field(st, "kicks", "[");
+    tapdisk_stats_val(st, "llu", tap->stats.kicks.in);
+    tapdisk_stats_val(st, "llu", tap->stats.kicks.out);
+    tapdisk_stats_leave(st, ']');
 }

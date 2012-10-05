@@ -52,241 +52,245 @@
 #define BWPRINTF(_f, _a...) fprintf (stderr, "log: " _f "\n", ## _a)
 
 struct writelog {
-  char* shmpath;
-  uint32_t shmsize;
-  void* shm;
+    char *shmpath;
+    uint32_t shmsize;
+    void *shm;
 
-  /* next unprocessed item in the writelog */
-  void* cur;
-  unsigned int inflight;
+    /* next unprocessed item in the writelog */
+    void *cur;
+    unsigned int inflight;
 
-  /* pointer to start and end of free data space for requests */
-  void* dhd;
-  void* dtl;
+    /* pointer to start and end of free data space for requests */
+    void *dhd;
+    void *dtl;
 
-  log_sring_t* sring;
-  log_front_ring_t fring;
+    log_sring_t *sring;
+    log_front_ring_t fring;
 };
 
 /* bytes free on the data ring */
-static inline unsigned int dring_avail(struct writelog* wl)
+static inline unsigned int dring_avail(struct writelog *wl)
 {
-  /* one byte reserved to distinguish empty from full */
-  if (wl->dhd == wl->dtl)
-    return sdataend(wl->shm) - sdatastart(wl->shm) - 1;
+    /* one byte reserved to distinguish empty from full */
+    if (wl->dhd == wl->dtl)
+        return sdataend(wl->shm) - sdatastart(wl->shm) - 1;
 
-  if (wl->dhd < wl->dtl)
-    return wl->dtl - wl->dhd - 1;
+    if (wl->dhd < wl->dtl)
+        return wl->dtl - wl->dhd - 1;
 
-  return (sdataend(wl->shm) - wl->dhd) + (wl->dtl - sdatastart(wl->shm)) - 1;
+    return (sdataend(wl->shm) - wl->dhd) + (wl->dtl -
+                                            sdatastart(wl->shm)) - 1;
 }
 
 /* advance ring pointer by len bytes */
-static inline void* dring_advance(struct writelog* wl, void* start, size_t len)
+static inline void *dring_advance(struct writelog *wl, void *start,
+                                  size_t len)
 {
-  void* next;
-  int dsz = sdataend(wl->shm) - sdatastart(wl->shm);
+    void *next;
+    int dsz = sdataend(wl->shm) - sdatastart(wl->shm);
 
-  next = start + (len % dsz);
-  if (next > sdataend(wl->shm))
-    next -= dsz;
+    next = start + (len % dsz);
+    if (next > sdataend(wl->shm))
+        next -= dsz;
 
-  return next;
+    return next;
 }
 
 static void usage(void)
 {
-  fprintf(stderr, "usage: tapdisk-client <sock>\n");
+    fprintf(stderr, "usage: tapdisk-client <sock>\n");
 }
 
 /* returns socket file descriptor */
-static int tdctl_open(const char* sockpath)
+static int tdctl_open(const char *sockpath)
 {
-  struct sockaddr_un saddr;
-  int fd;
+    struct sockaddr_un saddr;
+    int fd;
 
-  if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
-    BWPRINTF("error creating socket: %s", strerror(errno));
-    return -1;
-  }
+    if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
+        BWPRINTF("error creating socket: %s", strerror(errno));
+        return -1;
+    }
 
-  memset(&saddr, 0, sizeof(saddr));
-  saddr.sun_family = AF_UNIX;
-  memcpy(saddr.sun_path, sockpath, strlen(sockpath));
+    memset(&saddr, 0, sizeof(saddr));
+    saddr.sun_family = AF_UNIX;
+    memcpy(saddr.sun_path, sockpath, strlen(sockpath));
 
-  if (connect(fd, &saddr, sizeof(saddr)) < 0) {
-    BWPRINTF("error connecting to socket %s: %s", sockpath, strerror(errno));
-    close(fd);
-    return -1;
-  }
+    if (connect(fd, &saddr, sizeof(saddr)) < 0) {
+        BWPRINTF("error connecting to socket %s: %s", sockpath,
+                 strerror(errno));
+        close(fd);
+        return -1;
+    }
 
-  return fd;
+    return fd;
 }
 
-static int ctl_talk(int fd, struct log_ctlmsg* msg, char* rsp, int rsplen)
+static int ctl_talk(int fd, struct log_ctlmsg *msg, char *rsp, int rsplen)
 {
-  int rc;
+    int rc;
 
-  if ((rc = write(fd, msg, sizeof(*msg))) < 0) {
-    BWPRINTF("error sending ctl request: %s", strerror(errno));
-    return -1;
-  } else if (rc < sizeof(*msg)) {
-    BWPRINTF("short ctl write (%d/%zd bytes)", rc, sizeof(*msg));
-    return -1;
-  }
+    if ((rc = write(fd, msg, sizeof(*msg))) < 0) {
+        BWPRINTF("error sending ctl request: %s", strerror(errno));
+        return -1;
+    } else if (rc < sizeof(*msg)) {
+        BWPRINTF("short ctl write (%d/%zd bytes)", rc, sizeof(*msg));
+        return -1;
+    }
 
-  if (!rsplen)
+    if (!rsplen)
+        return 0;
+
+    if ((rc = read(fd, rsp, rsplen)) < 0) {
+        BWPRINTF("error reading ctl response: %s", strerror(errno));
+        return -1;
+    } else if (rc < rsplen) {
+        BWPRINTF("short ctl read (%d/%d bytes)", rc, rsplen);
+        return -1;
+    }
+
     return 0;
-
-  if ((rc = read(fd, rsp, rsplen)) < 0) {
-    BWPRINTF("error reading ctl response: %s", strerror(errno));
-    return -1;
-  } else if (rc < rsplen) {
-    BWPRINTF("short ctl read (%d/%d bytes)", rc, rsplen);
-    return -1;
-  }
-
-  return 0;
 }
 
-static int ctl_get_shmem(int fd, struct writelog* wl)
+static int ctl_get_shmem(int fd, struct writelog *wl)
 {
-  struct log_ctlmsg req;
-  char rsp[CTLRSPLEN_SHMP + 1];
-  int rc;
+    struct log_ctlmsg req;
+    char rsp[CTLRSPLEN_SHMP + 1];
+    int rc;
 
-  memset(&req, 0, sizeof(req));
-  memset(rsp, 0, sizeof(rsp));
+    memset(&req, 0, sizeof(req));
+    memset(rsp, 0, sizeof(rsp));
 
-  memcpy(req.msg, LOGCMD_SHMP, 4);
-  if ((rc = ctl_talk(fd, &req, rsp, CTLRSPLEN_SHMP)) < 0) {
-    BWPRINTF("error getting shared memory parameters");
-    return -1;
-  }
+    memcpy(req.msg, LOGCMD_SHMP, 4);
+    if ((rc = ctl_talk(fd, &req, rsp, CTLRSPLEN_SHMP)) < 0) {
+        BWPRINTF("error getting shared memory parameters");
+        return -1;
+    }
 
-  memcpy(&wl->shmsize, rsp, sizeof(wl->shmsize));
-  wl->shmpath = strdup(rsp + sizeof(wl->shmsize));
+    memcpy(&wl->shmsize, rsp, sizeof(wl->shmsize));
+    wl->shmpath = strdup(rsp + sizeof(wl->shmsize));
 
-  BDPRINTF("shared memory parameters: size: %u, path: %s",
-	   wl->shmsize, wl->shmpath);
+    BDPRINTF("shared memory parameters: size: %u, path: %s",
+             wl->shmsize, wl->shmpath);
 
-  return 0;
+    return 0;
 }
 
-static void ctlmsg_init(struct log_ctlmsg* msg, const char* cmd)
+static void ctlmsg_init(struct log_ctlmsg *msg, const char *cmd)
 {
-  memset(msg, 0, sizeof(*msg));
-  memcpy(msg->msg, cmd, 4);
+    memset(msg, 0, sizeof(*msg));
+    memcpy(msg->msg, cmd, 4);
 }
 
 static int ctl_get_writes(int fd)
 {
-  struct log_ctlmsg req;
-  char rsp[CTLRSPLEN_GET];
-  int rc;
+    struct log_ctlmsg req;
+    char rsp[CTLRSPLEN_GET];
+    int rc;
 
-  ctlmsg_init(&req, LOGCMD_GET);
+    ctlmsg_init(&req, LOGCMD_GET);
 
-  if ((rc = ctl_talk(fd, &req, rsp, CTLRSPLEN_GET)) < 0) {
-    BWPRINTF("error getting writes");
-    return -1;
-  }
+    if ((rc = ctl_talk(fd, &req, rsp, CTLRSPLEN_GET)) < 0) {
+        BWPRINTF("error getting writes");
+        return -1;
+    }
 
-  return 0;
+    return 0;
 }
 
 static int ctl_peek_writes(int fd)
 {
-  struct log_ctlmsg req;
-  char rsp[CTLRSPLEN_PEEK];
-  int rc;
+    struct log_ctlmsg req;
+    char rsp[CTLRSPLEN_PEEK];
+    int rc;
 
-  ctlmsg_init(&req, LOGCMD_PEEK);
+    ctlmsg_init(&req, LOGCMD_PEEK);
 
-  if ((rc = ctl_talk(fd, &req, rsp, CTLRSPLEN_PEEK)) < 0) {
-    BWPRINTF("error peeking writes");
-    return -1;
-  }
+    if ((rc = ctl_talk(fd, &req, rsp, CTLRSPLEN_PEEK)) < 0) {
+        BWPRINTF("error peeking writes");
+        return -1;
+    }
 
-  return 0;
+    return 0;
 }
 
 /* submit pending requests */
 static int ctl_kick(int fd)
 {
-  struct log_ctlmsg req;
-  int rc;
+    struct log_ctlmsg req;
+    int rc;
 
-  ctlmsg_init(&req, LOGCMD_KICK);
+    ctlmsg_init(&req, LOGCMD_KICK);
 
-  if ((rc = ctl_talk(fd, &req, NULL, 0)) < 0) {
-    BWPRINTF("error kicking ring");
-    return -1;
-  }
+    if ((rc = ctl_talk(fd, &req, NULL, 0)) < 0) {
+        BWPRINTF("error kicking ring");
+        return -1;
+    }
 
-  return 0;
+    return 0;
 }
 
 static int ctl_clear_writes(int fd)
 {
-  struct log_ctlmsg req;
-  char rsp[CTLRSPLEN_CLEAR];
-  int rc;
+    struct log_ctlmsg req;
+    char rsp[CTLRSPLEN_CLEAR];
+    int rc;
 
-  ctlmsg_init(&req, LOGCMD_CLEAR);
+    ctlmsg_init(&req, LOGCMD_CLEAR);
 
-  if ((rc = ctl_talk(fd, &req, rsp, CTLRSPLEN_CLEAR)) < 0) {
-    BWPRINTF("error clearing writes");
-    return -1;
-  }
+    if ((rc = ctl_talk(fd, &req, rsp, CTLRSPLEN_CLEAR)) < 0) {
+        BWPRINTF("error clearing writes");
+        return -1;
+    }
 
-  return 0;
+    return 0;
 }
 
-static int writelog_map(struct writelog* wl)
+static int writelog_map(struct writelog *wl)
 {
-  int fd;
-  void* shm;
+    int fd;
+    void *shm;
 
-  if ((fd = shm_open(wl->shmpath, O_RDWR, 0750)) < 0) {
-    BWPRINTF("could not open shared memory at %s: %s", wl->shmpath,
-	     strerror(errno));
-    return -1;
-  }
+    if ((fd = shm_open(wl->shmpath, O_RDWR, 0750)) < 0) {
+        BWPRINTF("could not open shared memory at %s: %s", wl->shmpath,
+                 strerror(errno));
+        return -1;
+    }
 
-  wl->shm = mmap(NULL, wl->shmsize, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
-  close(fd);
-  if (wl->shm == MAP_FAILED) {
-    BWPRINTF("could not mmap write log shm: %s", strerror(errno));
-    return -1;
-  }
-  wl->cur = wl->shm;
-  wl->inflight = 0;
-  wl->dhd = wl->dtl = sdatastart(wl->shm);
+    wl->shm =
+        mmap(NULL, wl->shmsize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    close(fd);
+    if (wl->shm == MAP_FAILED) {
+        BWPRINTF("could not mmap write log shm: %s", strerror(errno));
+        return -1;
+    }
+    wl->cur = wl->shm;
+    wl->inflight = 0;
+    wl->dhd = wl->dtl = sdatastart(wl->shm);
 
-  BDPRINTF("shm cookie: 0x%x, data size: %u", *((uint32_t*)wl->shm),
-	   dring_avail(wl));
+    BDPRINTF("shm cookie: 0x%x, data size: %u", *((uint32_t *) wl->shm),
+             dring_avail(wl));
 
-  wl->sring = sringstart(wl->shm);
-  /* need some thought about what to do on reconnect */
-  FRONT_RING_INIT(&wl->fring, wl->sring, SRINGSIZE);
+    wl->sring = sringstart(wl->shm);
+    /* need some thought about what to do on reconnect */
+    FRONT_RING_INIT(&wl->fring, wl->sring, SRINGSIZE);
 
-  return 0;
+    return 0;
 }
 
-static int writelog_dump(struct writelog* wl)
+static int writelog_dump(struct writelog *wl)
 {
-  struct disk_range* range = wl->shm;
+    struct disk_range *range = wl->shm;
 
-  for (range = wl->shm; (void*)range < bmend(wl->shm); range++) {
-    if (!range->count)
-      break;
+    for (range = wl->shm; (void *) range < bmend(wl->shm); range++) {
+        if (!range->count)
+            break;
 
-    BDPRINTF("dirty extent: %"PRIu64":%u",
-	     range->sector, range->count);
-  }
+        BDPRINTF("dirty extent: %" PRIu64 ":%u",
+                 range->sector, range->count);
+    }
 
-  return 0;
+    return 0;
 }
 
 /* walk dirty map and enqueue read requests.
@@ -294,122 +298,123 @@ static int writelog_dump(struct writelog* wl)
  *           1 when the ring is full
  *          -1 on error
  */
-static int writelog_enqueue_requests(struct writelog* wl)
+static int writelog_enqueue_requests(struct writelog *wl)
 {
-  struct disk_range* range = wl->shm;
-  log_request_t* req;
+    struct disk_range *range = wl->shm;
+    log_request_t *req;
 
-  for (range = wl->cur; (void*)range < bmend(wl->shm); range++) {
-    if (!range->count)
-      break;
+    for (range = wl->cur; (void *) range < bmend(wl->shm); range++) {
+        if (!range->count)
+            break;
 
-    if (RING_FULL(&wl->fring))
-	break;
+        if (RING_FULL(&wl->fring))
+            break;
 
-    /* insert range into request stream */
-    /* 1. get next request slot from ring */
-    /* 2. ensure enough shm space is available */
-    
-    BDPRINTF("enqueueing dirty extent: %"PRIu64":%u (ring space: %d/%d)",
-	     range->sector, range->count, RING_FREE_REQUESTS(&wl->fring),
-	     RING_SIZE(&wl->fring));
+        /* insert range into request stream */
+        /* 1. get next request slot from ring */
+        /* 2. ensure enough shm space is available */
 
-    req = RING_GET_REQUEST(&wl->fring, wl->fring.req_prod_pvt);
+        BDPRINTF("enqueueing dirty extent: %" PRIu64
+                 ":%u (ring space: %d/%d)", range->sector, range->count,
+                 RING_FREE_REQUESTS(&wl->fring), RING_SIZE(&wl->fring));
 
-    req->sector = range->sector;
-    req->count = range->count;
-    /* ... */
-    req->offset = 0;
+        req = RING_GET_REQUEST(&wl->fring, wl->fring.req_prod_pvt);
 
-    wl->fring.req_prod_pvt++;
-    wl->inflight++;
-  }
+        req->sector = range->sector;
+        req->count = range->count;
+        /* ... */
+        req->offset = 0;
 
-  wl->cur = range;
+        wl->fring.req_prod_pvt++;
+        wl->inflight++;
+    }
 
-  if (range->count)
-    return 1;
+    wl->cur = range;
 
-  return 0;
+    if (range->count)
+        return 1;
+
+    return 0;
 }
 
-static int writelog_dequeue_responses(struct writelog* wl)
+static int writelog_dequeue_responses(struct writelog *wl)
 {
-  RING_IDX rstart, rend;
-  log_response_t rsp;
+    RING_IDX rstart, rend;
+    log_response_t rsp;
 
-  rstart = wl->fring.rsp_cons;
-  rend = wl->sring->rsp_prod;
+    rstart = wl->fring.rsp_cons;
+    rend = wl->sring->rsp_prod;
 
-  BDPRINTF("ring kicked (start = %u, end = %u)", rstart, rend);
+    BDPRINTF("ring kicked (start = %u, end = %u)", rstart, rend);
 
-  while (rstart != rend) {
-    memcpy(&rsp, RING_GET_RESPONSE(&wl->fring, rstart), sizeof(rsp));
-    BDPRINTF("ctl: read response %"PRIu64":%u", rsp.sector, rsp.count);
-    wl->fring.rsp_cons = ++rstart;
-    wl->inflight--;
-  }
+    while (rstart != rend) {
+        memcpy(&rsp, RING_GET_RESPONSE(&wl->fring, rstart), sizeof(rsp));
+        BDPRINTF("ctl: read response %" PRIu64 ":%u", rsp.sector,
+                 rsp.count);
+        wl->fring.rsp_cons = ++rstart;
+        wl->inflight--;
+    }
 
-  return 0;
+    return 0;
 }
 
-static int writelog_free(struct writelog* wl)
+static int writelog_free(struct writelog *wl)
 {
-  if (wl->shmpath) {
-    free(wl->shmpath);
-    wl->shmpath = NULL;
-  }
-  if (wl->shm) {
-    munmap(wl->shm, wl->shmsize);
-    wl->shm = NULL;
-  }
+    if (wl->shmpath) {
+        free(wl->shmpath);
+        wl->shmpath = NULL;
+    }
+    if (wl->shm) {
+        munmap(wl->shm, wl->shmsize);
+        wl->shm = NULL;
+    }
 
-  return 0;
+    return 0;
 }
 
-int get_writes(struct writelog* wl, int fd, int peek)
+int get_writes(struct writelog *wl, int fd, int peek)
 {
-  int rc;
+    int rc;
 
-  if (peek)
-    rc = ctl_peek_writes(fd);
-  else
-    rc = ctl_get_writes(fd);
+    if (peek)
+        rc = ctl_peek_writes(fd);
+    else
+        rc = ctl_get_writes(fd);
 
-  if (rc < 0)
-    return rc;
+    if (rc < 0)
+        return rc;
 
-  wl->cur = wl->shm;
+    wl->cur = wl->shm;
 
-  return 0;
+    return 0;
 }
 
-int await_responses(struct writelog* wl, int fd)
+int await_responses(struct writelog *wl, int fd)
 {
-  struct log_ctlmsg msg;
-  int rc;
+    struct log_ctlmsg msg;
+    int rc;
 
-  /* sit on socket waiting for kick */
-  if ((rc = read(fd, &msg, sizeof(msg))) < 0) {
-    BWPRINTF("error reading from control socket: %s", strerror(errno));
-    return -1;
-  } else if (!rc) {
-    BWPRINTF("EOF on control socket");
-    return -1;
-  } else if (rc < sizeof(msg)) {
-    BWPRINTF("short reply (%d/%lu bytes)", rc, sizeof(msg));
-    return -1;
-  }
+    /* sit on socket waiting for kick */
+    if ((rc = read(fd, &msg, sizeof(msg))) < 0) {
+        BWPRINTF("error reading from control socket: %s", strerror(errno));
+        return -1;
+    } else if (!rc) {
+        BWPRINTF("EOF on control socket");
+        return -1;
+    } else if (rc < sizeof(msg)) {
+        BWPRINTF("short reply (%d/%lu bytes)", rc, sizeof(msg));
+        return -1;
+    }
 
-  if (strncmp(msg.msg, LOGCMD_KICK, 4)) {
-    BWPRINTF("Unknown message received: %.4s", msg.msg);
-    return -1;
-  }
+    if (strncmp(msg.msg, LOGCMD_KICK, 4)) {
+        BWPRINTF("Unknown message received: %.4s", msg.msg);
+        return -1;
+    }
 
-  if (writelog_dequeue_responses(wl) < 0)
-    return -1;
+    if (writelog_dequeue_responses(wl) < 0)
+        return -1;
 
-  return 0;
+    return 0;
 }
 
 /* read_loop:
@@ -420,82 +425,82 @@ int await_responses(struct writelog* wl, int fd)
  *    into the ring
  * 5. when entire bitmap has been queued, go to 1?
  */
-int read_loop(struct writelog* wl, int fd)
+int read_loop(struct writelog *wl, int fd)
 {
-  int rc;
+    int rc;
 
-  if (get_writes(wl, fd, 1) < 0)
-    return -1;
-  writelog_dump(wl);
+    if (get_writes(wl, fd, 1) < 0)
+        return -1;
+    writelog_dump(wl);
 
-  do {
-    rc = writelog_enqueue_requests(wl);
+    do {
+        rc = writelog_enqueue_requests(wl);
 
-    if (RING_FREE_REQUESTS(&wl->fring) < RING_SIZE(&wl->fring))
-      RING_PUSH_REQUESTS(&wl->fring);
-    if (ctl_kick(fd) < 0)
-      return -1;
+        if (RING_FREE_REQUESTS(&wl->fring) < RING_SIZE(&wl->fring))
+            RING_PUSH_REQUESTS(&wl->fring);
+        if (ctl_kick(fd) < 0)
+            return -1;
 
-    /* collect responses */
-    if (wl->inflight && await_responses(wl, fd) < 0)
-      return -1;
-  } while (rc > 0);
+        /* collect responses */
+        if (wl->inflight && await_responses(wl, fd) < 0)
+            return -1;
+    } while (rc > 0);
 
-  return rc;
+    return rc;
 }
 
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
-  int fd;
-  struct writelog wl;
-  char cmd;
+    int fd;
+    struct writelog wl;
+    char cmd;
 
-  if (argc < 2) {
-    usage();
-    return 1;
-  }
+    if (argc < 2) {
+        usage();
+        return 1;
+    }
 
-  if (argc < 3)
-    cmd = 'p';
-  else
-    cmd = argv[2][0];
-    
-  fd = tdctl_open(argv[1]);
+    if (argc < 3)
+        cmd = 'p';
+    else
+        cmd = argv[2][0];
 
-  if (ctl_get_shmem(fd, &wl) < 0)
-    return 1;
+    fd = tdctl_open(argv[1]);
 
-  if (writelog_map(&wl) < 0) {
-    BWPRINTF("Error mapping write log: %s", strerror(errno));
-    return 1;
-  }
+    if (ctl_get_shmem(fd, &wl) < 0)
+        return 1;
 
-  switch (cmd) {
-  case 'p':
-    if (get_writes(&wl, fd, 1) < 0)
-      return 1;
-    writelog_dump(&wl);
-    break;
-  case 'c':
-    if (ctl_clear_writes(fd) < 0)
-      return 1;
-    break;
-  case 'g':
-    if (get_writes(&wl, fd, 0) < 0)
-      return 1;
-    writelog_dump(&wl);
-    break;
-  case 'r':
-    if (read_loop(&wl, fd) < 0)
-      return 1;
-    break;
-  default:
-    usage();
-    return 1;
-  }
+    if (writelog_map(&wl) < 0) {
+        BWPRINTF("Error mapping write log: %s", strerror(errno));
+        return 1;
+    }
 
-  writelog_free(&wl);
-  close(fd);
+    switch (cmd) {
+    case 'p':
+        if (get_writes(&wl, fd, 1) < 0)
+            return 1;
+        writelog_dump(&wl);
+        break;
+    case 'c':
+        if (ctl_clear_writes(fd) < 0)
+            return 1;
+        break;
+    case 'g':
+        if (get_writes(&wl, fd, 0) < 0)
+            return 1;
+        writelog_dump(&wl);
+        break;
+    case 'r':
+        if (read_loop(&wl, fd) < 0)
+            return 1;
+        break;
+    default:
+        usage();
+        return 1;
+    }
 
-  return 0;
+    writelog_free(&wl);
+    close(fd);
+
+    return 0;
 }

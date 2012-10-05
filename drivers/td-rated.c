@@ -48,20 +48,21 @@
 #include "blktap.h"
 #include "block-valve.h"
 
-static void
-rlb_vlog_vfprintf(int prio, const char *fmt, va_list ap)
+static void rlb_vlog_vfprintf(int prio, const char *fmt, va_list ap)
 {
-	vfprintf(stderr, fmt, ap); fputc('\n', stderr);
+    vfprintf(stderr, fmt, ap);
+    fputc('\n', stderr);
 }
 
-static void (*rlb_vlog)(int prio, const char *fmt, va_list ap);
+static void (*rlb_vlog) (int prio, const char *fmt, va_list ap);
 
 __printf(2, 3)
-static void
-rlb_log(int prio, const char *fmt, ...)
+static void rlb_log(int prio, const char *fmt, ...)
 {
-	va_list ap;
-	va_start(ap, fmt); rlb_vlog(prio, fmt, ap); va_end(ap);
+    va_list ap;
+    va_start(ap, fmt);
+    rlb_vlog(prio, fmt, ap);
+    va_end(ap);
 }
 
 static int debug = 0;
@@ -94,28 +95,28 @@ static int debug = 0;
 	__cond;						\
 })
 
-typedef struct ratelimit_bridge			td_rlb_t;
-typedef struct ratelimit_connection		td_rlb_conn_t;
+typedef struct ratelimit_bridge td_rlb_t;
+typedef struct ratelimit_connection td_rlb_conn_t;
 
 struct ratelimit_connection {
-	int									sock;
+    int sock;
 
-	unsigned long						need; /* I/O requested */
-	unsigned long						gntd; /* I/O granted, pending */
+    unsigned long need;         /* I/O requested */
+    unsigned long gntd;         /* I/O granted, pending */
 
-	TAILQ_ENTRY(ratelimit_connection)	open_entry; /* connected */
+     TAILQ_ENTRY(ratelimit_connection) open_entry;  /* connected */
 
-	TAILQ_ENTRY(ratelimit_connection)	wait_entry; /* need > 0 */
+     TAILQ_ENTRY(ratelimit_connection) wait_entry;  /* need > 0 */
 
-	/**
+    /**
 	 * set to 1 if it's in the waiting list
 	 */
-	unsigned int						waiting:1;
+    unsigned int waiting:1;
 
-	struct {
-		struct timeval					since;
-		struct timeval					total;
-	} wstat;
+    struct {
+        struct timeval since;
+        struct timeval total;
+    } wstat;
 };
 
 TAILQ_HEAD(tqh_ratelimit_connection, ratelimit_connection);
@@ -123,40 +124,40 @@ TAILQ_HEAD(tqh_ratelimit_connection, ratelimit_connection);
 #define RLB_CONN_MAX					1024
 
 struct ratelimit_ops {
-	void    (*usage)(td_rlb_t *rlb, FILE *stream, void *data);
+    void (*usage) (td_rlb_t * rlb, FILE * stream, void *data);
 
-	int     (*create)(td_rlb_t *rlb, int argc, char **argv, void **data);
-	void    (*destroy)(td_rlb_t *rlb, void *data);
+    int (*create) (td_rlb_t * rlb, int argc, char **argv, void **data);
+    void (*destroy) (td_rlb_t * rlb, void *data);
 
-	void    (*info)(td_rlb_t *rlb, void *data);
+    void (*info) (td_rlb_t * rlb, void *data);
 
-	void    (*settimeo)(td_rlb_t *rlb, struct timeval **tv, void *data);
-	void    (*timeout)(td_rlb_t *rlb, void *data);
-	void    (*dispatch)(td_rlb_t *rlb, void *data);
-	void    (*reset)(td_rlb_t *rlb, void *data);
+    void (*settimeo) (td_rlb_t * rlb, struct timeval ** tv, void *data);
+    void (*timeout) (td_rlb_t * rlb, void *data);
+    void (*dispatch) (td_rlb_t * rlb, void *data);
+    void (*reset) (td_rlb_t * rlb, void *data);
 };
 
 struct ratelimit_bridge {
-	char                          *name;
-	char							*ident;
+    char *name;
+    char *ident;
 
-	struct sockaddr_un				addr;
-	char							*path;
-	int								sock;
+    struct sockaddr_un addr;
+    char *path;
+    int sock;
 
-	struct tqh_ratelimit_connection	open; /* all connections */
-	struct tqh_ratelimit_connection	wait; /* all in need */
+    struct tqh_ratelimit_connection open;   /* all connections */
+    struct tqh_ratelimit_connection wait;   /* all in need */
 
-	struct timeval					ts, now;
+    struct timeval ts, now;
 
-	td_rlb_conn_t					connv[RLB_CONN_MAX];
-	td_rlb_conn_t					*free[RLB_CONN_MAX];
-	int								n_free;
+    td_rlb_conn_t connv[RLB_CONN_MAX];
+    td_rlb_conn_t *free[RLB_CONN_MAX];
+    int n_free;
 
-	struct rlb_valve {
-		struct ratelimit_ops		*ops;
-		void						*data;
-	} valve;
+    struct rlb_valve {
+        struct ratelimit_ops *ops;
+        void *data;
+    } valve;
 };
 
 #define rlb_for_each_conn(_conn, _rlb)					\
@@ -183,7 +184,7 @@ struct ratelimit_bridge {
 static struct ratelimit_ops *rlb_find_valve(const char *name);
 
 static int rlb_create_valve(td_rlb_t *, struct rlb_valve *,
-			    const char *name, int argc, char **argv);
+                            const char *name, int argc, char **argv);
 
 /*
  * util
@@ -193,491 +194,468 @@ static int rlb_create_valve(td_rlb_t *, struct rlb_valve *,
 #define case_M case 'M': case 'm'
 #define case_K case 'K': case 'k'
 
-static long
-rlb_strtol(const char *s)
+static long rlb_strtol(const char *s)
 {
-	unsigned long l, u = 1;
-	char *end, p, q;
+    unsigned long l, u = 1;
+    char *end, p, q;
 
-	l = strtoul(s, &end, 0);
-	if (!*end)
-		return l;
+    l = strtoul(s, &end, 0);
+    if (!*end)
+        return l;
 
-	p = *end++;
+    p = *end++;
 
-	switch (p) {
-	case_G: case_M: case_K:
+    switch (p) {
+      case_G: case_M: case_K:
 
-		q = *end++;
+        q = *end++;
 
-		switch (q) {
-		case 'i':
-			switch (p) {
-			case_G:
-				u *= 1024;
-			case_M:
-				u *= 1024;
-			case_K:
-				u *= 1024;
-			}
-			break;
+        switch (q) {
+        case 'i':
+            switch (p) {
+              case_G:
+                u *= 1024;
+              case_M:
+                u *= 1024;
+              case_K:
+                u *= 1024;
+            }
+            break;
 
-		case 0:
-			switch (p) {
-			case_G:
-				u *= 1000;
-			case_M:
-				u *= 1000;
-			case_K:
-				u *= 1000;
-			}
-			break;
+        case 0:
+            switch (p) {
+              case_G:
+                u *= 1000;
+              case_M:
+                u *= 1000;
+              case_K:
+                u *= 1000;
+            }
+            break;
 
-		default:
-			goto fail;
-		}
-		break;
+        default:
+            goto fail;
+        }
+        break;
 
-	case 0:
-		break;
+    case 0:
+        break;
 
-	default:
-		goto fail;
-	}
+    default:
+        goto fail;
+    }
 
-	return l * u;
+    return l * u;
 
-fail:
-	return -EINVAL;
+  fail:
+    return -EINVAL;
 }
 
-static char*
-vmprintf(const char *fmt, va_list ap)
+static char *vmprintf(const char *fmt, va_list ap)
 {
-	char *s;
-	int n;
+    char *s;
+    int n;
 
-	n = vasprintf(&s, fmt, ap);
-	if (n < 0)
-		s = NULL;
+    n = vasprintf(&s, fmt, ap);
+    if (n < 0)
+        s = NULL;
 
-	return s;
+    return s;
 }
 
 __printf(1, 2)
-static char*
-mprintf(const char *fmt, ...)
+static char *mprintf(const char *fmt, ...)
 {
-	va_list ap;
-	char *s;
+    va_list ap;
+    char *s;
 
-	va_start(ap, fmt);
-	s = vmprintf(fmt, ap);
-	va_end(ap);
+    va_start(ap, fmt);
+    s = vmprintf(fmt, ap);
+    va_end(ap);
 
-	return s;
+    return s;
 }
 
-static int
-sysctl_vscanf(const char *name, const char *fmt, va_list ap)
+static int sysctl_vscanf(const char *name, const char *fmt, va_list ap)
 {
-	char *path = NULL;
-	FILE *s = NULL;
-	int rv;
+    char *path = NULL;
+    FILE *s = NULL;
+    int rv;
 
-	path = mprintf("/proc/sys/%s", name);
-	if (!path) {
-		rv = -errno;
-		goto fail;
-	}
+    path = mprintf("/proc/sys/%s", name);
+    if (!path) {
+        rv = -errno;
+        goto fail;
+    }
 
-	s = fopen(path, "r");
-	if (!s) {
-		rv = -errno;
-		goto fail;
-	}
+    s = fopen(path, "r");
+    if (!s) {
+        rv = -errno;
+        goto fail;
+    }
 
-	rv = vfscanf(s, fmt, ap);
-fail:
-	if (s)
-		fclose(s);
+    rv = vfscanf(s, fmt, ap);
+  fail:
+    if (s)
+        fclose(s);
 
-	if (path)
-		free(path);
+    if (path)
+        free(path);
 
-	return rv;
+    return rv;
 }
 
-static int
-sysctl_scanf(const char *name, const char *fmt, ...)
+static int sysctl_scanf(const char *name, const char *fmt, ...)
 {
-	va_list(ap);
-	int rv;
+    va_list(ap);
+    int rv;
 
-	va_start(ap, fmt);
-	rv = sysctl_vscanf(name, fmt, ap);
-	va_end(ap);
+    va_start(ap, fmt);
+    rv = sysctl_vscanf(name, fmt, ap);
+    va_end(ap);
 
-	return rv;
+    return rv;
 }
 
-static long
-sysctl_strtoul(const char *name)
+static long sysctl_strtoul(const char *name)
 {
-	unsigned val;
-	int n;
+    unsigned val;
+    int n;
 
-	n = sysctl_scanf(name, "%lu", &val);
-	if (n < 0)
-		return n;
-	if (n != 1)
-		return -EINVAL;
+    n = sysctl_scanf(name, "%lu", &val);
+    if (n < 0)
+        return n;
+    if (n != 1)
+        return -EINVAL;
 
-	return val;
+    return val;
 }
 
 
-static long long
-rlb_tv_usec(const struct timeval *tv)
+static long long rlb_tv_usec(const struct timeval *tv)
 {
-	long long us;
+    long long us;
 
-	us  = tv->tv_sec;
-	us *= 1000000;
-	us += tv->tv_usec;
+    us = tv->tv_sec;
+    us *= 1000000;
+    us += tv->tv_usec;
 
-	return us;
+    return us;
 }
 
 static long long
-rlb_usec_since(td_rlb_t *rlb, const struct timeval *since)
+rlb_usec_since(td_rlb_t * rlb, const struct timeval *since)
 {
-	struct timeval delta;
+    struct timeval delta;
 
-	timersub(&rlb->now, since, &delta);
+    timersub(&rlb->now, since, &delta);
 
-	return rlb_tv_usec(&delta);
+    return rlb_tv_usec(&delta);
 }
 
-static inline void
-rlb_argv_shift(int *optind, int *argc, char ***argv)
+static inline void rlb_argv_shift(int *optind, int *argc, char ***argv)
 {
-	/* reset optind and args after '--' */
+    /* reset optind and args after '--' */
 
-	*optind -= 1;
+    *optind -= 1;
 
-	*argc   -= *optind;
-	*argv   += *optind;
+    *argc -= *optind;
+    *argv += *optind;
 
-	*optind  = 1;
+    *optind = 1;
 }
 
 /*
  * socket I/O
  */
 
-static void
-rlb_sock_close(td_rlb_t *rlb)
+static void rlb_sock_close(td_rlb_t * rlb)
 {
-	if (rlb->path) {
-		unlink(rlb->path);
-		rlb->path = NULL;
-	}
+    if (rlb->path) {
+        unlink(rlb->path);
+        rlb->path = NULL;
+    }
 
-	if (rlb->sock >= 0) {
-		close(rlb->sock);
-		rlb->sock = -1;
-	}
+    if (rlb->sock >= 0) {
+        close(rlb->sock);
+        rlb->sock = -1;
+    }
+}
+
+static int rlb_sock_open(td_rlb_t * rlb)
+{
+    int s, err;
+
+    rlb->sock = -1;
+
+    s = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (s < 0) {
+        PERROR("socket");
+        err = -errno;
+        goto fail;
+    }
+
+    rlb->sock = s;
+
+    rlb->addr.sun_family = AF_UNIX;
+
+    if (rlb->name[0] == '/')
+        strncpy(rlb->addr.sun_path, rlb->name, sizeof(rlb->addr.sun_path));
+    else
+        snprintf(rlb->addr.sun_path, sizeof(rlb->addr.sun_path),
+                 "%s/%s", TD_VALVE_SOCKDIR, rlb->name);
+
+    err = bind(rlb->sock, &rlb->addr, sizeof(rlb->addr));
+    if (err) {
+        PERROR("%s", rlb->addr.sun_path);
+        err = -errno;
+        goto fail;
+    }
+
+    rlb->path = rlb->addr.sun_path;
+
+    err = listen(rlb->sock, RLB_CONN_MAX);
+    if (err) {
+        PERROR("listen(%s)", rlb->addr.sun_path);
+        err = -errno;
+        goto fail;
+    }
+
+    return 0;
+
+  fail:
+    rlb_sock_close(rlb);
+    return err;
 }
 
 static int
-rlb_sock_open(td_rlb_t *rlb)
+rlb_sock_send(td_rlb_t * rlb, td_rlb_conn_t * conn,
+              const void *msg, size_t size)
 {
-	int s, err;
+    ssize_t n;
 
-	rlb->sock = -1;
+    n = send(conn->sock, msg, size, MSG_DONTWAIT);
+    if (n < 0)
+        return -errno;
+    if (n && n != size)
+        return -EPROTO;
 
-	s = socket(AF_UNIX, SOCK_STREAM, 0);
-	if (s < 0) {
-		PERROR("socket");
-		err = -errno;
-		goto fail;
-	}
-
-	rlb->sock = s;
-
-	rlb->addr.sun_family = AF_UNIX;
-
-	if (rlb->name[0] == '/')
-		strncpy(rlb->addr.sun_path, rlb->name,
-			sizeof(rlb->addr.sun_path));
-	else
-		snprintf(rlb->addr.sun_path, sizeof(rlb->addr.sun_path),
-			 "%s/%s", TD_VALVE_SOCKDIR, rlb->name);
-
-	err = bind(rlb->sock, &rlb->addr, sizeof(rlb->addr));
-	if (err) {
-		PERROR("%s", rlb->addr.sun_path);
-		err = -errno;
-		goto fail;
-	}
-
-	rlb->path = rlb->addr.sun_path;
-
-	err = listen(rlb->sock, RLB_CONN_MAX);
-	if (err) {
-		PERROR("listen(%s)", rlb->addr.sun_path);
-		err = -errno;
-		goto fail;
-	}
-
-	return 0;
-
-fail:
-	rlb_sock_close(rlb);
-	return err;
+    return 0;
 }
 
 static int
-rlb_sock_send(td_rlb_t *rlb, td_rlb_conn_t *conn,
-	      const void *msg, size_t size)
+rlb_sock_recv(td_rlb_t * rlb, td_rlb_conn_t * conn, void *msg, size_t size)
 {
-	ssize_t n;
+    ssize_t n;
 
-	n = send(conn->sock, msg, size, MSG_DONTWAIT);
-	if (n < 0)
-		return -errno;
-	if (n && n != size)
-		return -EPROTO;
+    n = recv(conn->sock, msg, size, MSG_DONTWAIT);
+    if (n < 0)
+        return -errno;
 
-	return 0;
+    return n;
 }
 
-static int
-rlb_sock_recv(td_rlb_t *rlb, td_rlb_conn_t *conn,
-	      void *msg, size_t size)
+static td_rlb_conn_t *rlb_conn_alloc(td_rlb_t * rlb)
 {
-	ssize_t n;
+    td_rlb_conn_t *conn = NULL;
 
-	n = recv(conn->sock, msg, size, MSG_DONTWAIT);
-	if (n < 0)
-		return -errno;
+    if (likely(rlb->n_free > 0))
+        conn = rlb->free[--rlb->n_free];
 
-	return n;
+    return conn;
 }
 
-static td_rlb_conn_t *
-rlb_conn_alloc(td_rlb_t *rlb)
+static void rlb_conn_free(td_rlb_t * rlb, td_rlb_conn_t * conn)
 {
-	td_rlb_conn_t *conn = NULL;
+    BUG_ON(rlb->n_free >= RLB_CONN_MAX);
 
-	if (likely(rlb->n_free > 0))
-		conn = rlb->free[--rlb->n_free];
-
-	return conn;
+    rlb->free[rlb->n_free++] = conn;
 }
 
-static void
-rlb_conn_free(td_rlb_t *rlb, td_rlb_conn_t *conn)
+static int rlb_conn_id(td_rlb_t * rlb, td_rlb_conn_t * conn)
 {
-	BUG_ON(rlb->n_free >= RLB_CONN_MAX);
-
-	rlb->free[rlb->n_free++] = conn;
+    return conn - rlb->connv;
 }
 
-static int
-rlb_conn_id(td_rlb_t *rlb, td_rlb_conn_t *conn)
+static void rlb_conn_info(td_rlb_t * rlb, td_rlb_conn_t * conn)
 {
-	return conn - rlb->connv;
+    long long wtime;
+
+    wtime = 0;
+    if (conn->waiting)
+        wtime = rlb_usec_since(rlb, &conn->wstat.since) / 1000;
+
+    WARN_ON(! !conn->need != conn->waiting);
+
+    INFO("conn[%d] needs %lu (since %llu ms, total %lu.%06lu s),"
+         " %lu granted",
+         rlb_conn_id(rlb, conn), conn->need, wtime,
+         conn->wstat.total.tv_sec, conn->wstat.total.tv_usec, conn->gntd);
 }
 
-static void
-rlb_conn_info(td_rlb_t *rlb, td_rlb_conn_t *conn)
+static void rlb_conn_infos(td_rlb_t * rlb)
 {
-	long long wtime;
+    td_rlb_conn_t *conn;
 
-	wtime = 0;
-	if (conn->waiting)
-		wtime = rlb_usec_since(rlb, &conn->wstat.since) / 1000;
-
-	WARN_ON(!!conn->need != conn->waiting);
-
-	INFO("conn[%d] needs %lu (since %llu ms, total %lu.%06lu s),"
-	     " %lu granted",
-	     rlb_conn_id(rlb, conn), conn->need, wtime,
-	     conn->wstat.total.tv_sec, conn->wstat.total.tv_usec,
-	     conn->gntd);
+    rlb_for_each_conn(conn, rlb)
+        rlb_conn_info(rlb, conn);
 }
 
-static void
-rlb_conn_infos(td_rlb_t *rlb)
+static void rlb_conn_close(td_rlb_t * rlb, td_rlb_conn_t * conn)
 {
-	td_rlb_conn_t *conn;
+    int s = conn->sock;
 
-	rlb_for_each_conn(conn, rlb)
-		rlb_conn_info(rlb, conn);
+    INFO("Connection %d closed.", rlb_conn_id(rlb, conn));
+    rlb_conn_info(rlb, conn);
+
+    if (s) {
+        close(s);
+        conn->sock = -1;
+    }
+
+    TAILQ_REMOVE(&rlb->wait, conn, wait_entry);
+    TAILQ_REMOVE(&rlb->open, conn, open_entry);
+
+    rlb_conn_free(rlb, conn);
 }
 
-static void
-rlb_conn_close(td_rlb_t *rlb, td_rlb_conn_t *conn)
+static void rlb_conn_receive(td_rlb_t * rlb, td_rlb_conn_t * conn)
 {
-	int s = conn->sock;
+    struct td_valve_req buf[32], req = { -1, -1 };
+    ssize_t n;
+    int i, err;
 
-	INFO("Connection %d closed.", rlb_conn_id(rlb, conn));
-	rlb_conn_info(rlb, conn);
+    n = rlb_sock_recv(rlb, conn, buf, sizeof(buf));
+    if (!n)
+        goto close;
 
-	if (s) {
-		close(s);
-		conn->sock = -1;
-	}
+    if (n < 0) {
+        err = n;
+        if (err != -EAGAIN)
+            goto fail;
+    }
 
-	TAILQ_REMOVE(&rlb->wait, conn, wait_entry);
-	TAILQ_REMOVE(&rlb->open, conn, open_entry);
+    if (unlikely(n % sizeof(req))) {
+        err = -EPROTO;
+        goto fail;
+    }
 
-	rlb_conn_free(rlb, conn);
-}
+    for (i = 0; i < n / sizeof(buf[0]); i++) {
+        req = buf[i];
 
-static void
-rlb_conn_receive(td_rlb_t *rlb, td_rlb_conn_t *conn)
-{
-	struct td_valve_req buf[32], req = { -1, -1 };
-	ssize_t n;
-	int i, err;
+        if (unlikely(req.need > TD_RLB_REQUEST_MAX)) {
+            err = -EINVAL;
+            goto fail;
+        }
 
-	n = rlb_sock_recv(rlb, conn, buf, sizeof(buf));
-	if (!n)
-		goto close;
+        if (unlikely(req.done > conn->gntd)) {
+            err = -EINVAL;
+            goto fail;
+        }
 
-	if (n < 0) {
-		err = n;
-		if (err != -EAGAIN)
-			goto fail;
-	}
+        conn->need += req.need;
+        conn->gntd -= req.done;
 
-	if (unlikely(n % sizeof(req))) {
-		err = -EPROTO;
-		goto fail;
-	}
+        DBG(8, "rcv: %lu/%lu need=%lu gntd=%lu",
+            req.need, req.done, conn->need, conn->gntd);
 
-	for (i = 0; i < n / sizeof(buf[0]); i++) {
-		req = buf[i];
+        if (unlikely(conn->need > TD_RLB_REQUEST_MAX)) {
+            err = -EINVAL;
+            goto fail;
+        }
+    }
 
-		if (unlikely(req.need > TD_RLB_REQUEST_MAX)) {
-			err = -EINVAL;
-			goto fail;
-		}
+    if (conn->need && !conn->waiting) {
+        TAILQ_INSERT_TAIL(&rlb->wait, conn, wait_entry);
+        conn->waiting = 1U;
+        conn->wstat.since = rlb->now;
+    }
 
-		if (unlikely(req.done > conn->gntd)) {
-			err = -EINVAL;
-			goto fail;
-		}
+    return;
 
-		conn->need += req.need;
-		conn->gntd -= req.done;
+  fail:
+    WARN("err = %d (%s)"
+         " (need %ld/%ld, %ld/%ld done),"
+         " closing connection.",
+         err, strerror(-err), req.need, conn->need, req.done, conn->gntd);
 
-		DBG(8, "rcv: %lu/%lu need=%lu gntd=%lu",
-		    req.need, req.done, conn->need, conn->gntd);
-
-		if (unlikely(conn->need > TD_RLB_REQUEST_MAX)) {
-			err = -EINVAL;
-			goto fail;
-		}
-	}
-
-	if (conn->need && !conn->waiting) {
-		TAILQ_INSERT_TAIL(&rlb->wait, conn, wait_entry);
-		conn->waiting = 1U;
-		conn->wstat.since = rlb->now;
-	}
-
-	return;
-
-fail:
-	WARN("err = %d (%s)"
-	     " (need %ld/%ld, %ld/%ld done),"
-	     " closing connection.",
-	     err, strerror(-err),
-	     req.need, conn->need, req.done, conn->gntd);
-
-	rlb_conn_info(rlb, conn);
-close:
-	rlb_conn_close(rlb, conn);
+    rlb_conn_info(rlb, conn);
+  close:
+    rlb_conn_close(rlb, conn);
 }
 
 static void
-rlb_conn_respond(td_rlb_t *rlb, td_rlb_conn_t *conn, unsigned long need)
+rlb_conn_respond(td_rlb_t * rlb, td_rlb_conn_t * conn, unsigned long need)
 {
-	int err;
+    int err;
 
-	BUG_ON(need > conn->need);
+    BUG_ON(need > conn->need);
 
-	err = rlb_sock_send(rlb, conn, &need, sizeof(need));
-	if (err)
-		goto fail;
+    err = rlb_sock_send(rlb, conn, &need, sizeof(need));
+    if (err)
+        goto fail;
 
-	conn->need -= need;
-	conn->gntd += need;
+    conn->need -= need;
+    conn->gntd += need;
 
-	DBG(8, "snd: %lu need=%lu gntd=%lu", need, conn->need, conn->gntd);
+    DBG(8, "snd: %lu need=%lu gntd=%lu", need, conn->need, conn->gntd);
 
-	if (!conn->need) {
-		struct timeval delta;
+    if (!conn->need) {
+        struct timeval delta;
 
-		timersub(&rlb->now, &conn->wstat.since, &delta);
-		timeradd(&conn->wstat.total, &delta, &conn->wstat.total);
+        timersub(&rlb->now, &conn->wstat.since, &delta);
+        timeradd(&conn->wstat.total, &delta, &conn->wstat.total);
 
-		TAILQ_REMOVE(&rlb->wait, conn, wait_entry);
-		conn->waiting = 0U;
-	}
+        TAILQ_REMOVE(&rlb->wait, conn, wait_entry);
+        conn->waiting = 0U;
+    }
 
-	return;
+    return;
 
-fail:
-	WARN("err = %d, killing connection.", err);
-	rlb_conn_close(rlb, conn);
+  fail:
+    WARN("err = %d, killing connection.", err);
+    rlb_conn_close(rlb, conn);
 }
 
-static void
-rlb_accept_conn(td_rlb_t *rlb)
+static void rlb_accept_conn(td_rlb_t * rlb)
 {
-	td_rlb_conn_t *conn;
-	int s, err;
+    td_rlb_conn_t *conn;
+    int s, err;
 
-	s = accept(rlb->sock, NULL, NULL);
-	if (!s) {
-		err = -errno;
-		goto fail;
-	}
+    s = accept(rlb->sock, NULL, NULL);
+    if (!s) {
+        err = -errno;
+        goto fail;
+    }
 
-	conn = rlb_conn_alloc(rlb);
-	if (!conn) {
-		err = -ENOMEM;
-		close(s);
-		goto fail;
-	}
+    conn = rlb_conn_alloc(rlb);
+    if (!conn) {
+        err = -ENOMEM;
+        close(s);
+        goto fail;
+    }
 
-	INFO("Accepting connection %td.", conn - rlb->connv);
+    INFO("Accepting connection %td.", conn - rlb->connv);
 
-	memset(conn, 0, sizeof(*conn));
-	conn->sock = s;
-	TAILQ_INSERT_TAIL(&rlb->open, conn, open_entry);
+    memset(conn, 0, sizeof(*conn));
+    conn->sock = s;
+    TAILQ_INSERT_TAIL(&rlb->open, conn, open_entry);
 
-	return;
+    return;
 
-fail:
-	WARN("err = %d", err);
+  fail:
+    WARN("err = %d", err);
 }
 
-static long long
-rlb_pending(td_rlb_t *rlb)
+static long long rlb_pending(td_rlb_t * rlb)
 {
-	td_rlb_conn_t *conn;
-	long long pend = 0;
+    td_rlb_conn_t *conn;
+    long long pend = 0;
 
-	rlb_for_each_conn(conn, rlb)
-		pend += conn->gntd;
+    rlb_for_each_conn(conn, rlb)
+        pend += conn->gntd;
 
-	return pend;
+    return pend;
 }
 
 /*
@@ -687,203 +665,196 @@ rlb_pending(td_rlb_t *rlb)
 typedef struct ratelimit_token td_rlb_token_t;
 
 struct ratelimit_token {
-	long                      cred;
-	long                      cap;
-	long                      rate;
-	struct timeval            timeo;
+    long cred;
+    long cap;
+    long rate;
+    struct timeval timeo;
 };
 
 static void
-rlb_token_settimeo(td_rlb_t *rlb, struct timeval **_tv, void *data)
+rlb_token_settimeo(td_rlb_t * rlb, struct timeval **_tv, void *data)
 {
-	td_rlb_token_t *token = data;
-	struct timeval *tv = &token->timeo;
-	long long us;
+    td_rlb_token_t *token = data;
+    struct timeval *tv = &token->timeo;
+    long long us;
 
-	if (TAILQ_EMPTY(&rlb->wait)) {
-		*_tv = NULL;
-		return;
-	}
+    if (TAILQ_EMPTY(&rlb->wait)) {
+        *_tv = NULL;
+        return;
+    }
 
-	WARN_ON(token->cred >= 0);
+    WARN_ON(token->cred >= 0);
 
-	us  = -token->cred;
-	us *= 1000000;
-	us /= token->rate;
+    us = -token->cred;
+    us *= 1000000;
+    us /= token->rate;
 
-	tv->tv_sec  = us / 1000000;
-	tv->tv_usec = us % 1000000;
+    tv->tv_sec = us / 1000000;
+    tv->tv_usec = us % 1000000;
 
-	WARN_ON(!timerisset(tv));
+    WARN_ON(!timerisset(tv));
 
-	*_tv = tv;
+    *_tv = tv;
 }
 
-static void
-rlb_token_refill(td_rlb_t *rlb, td_rlb_token_t *token)
+static void rlb_token_refill(td_rlb_t * rlb, td_rlb_token_t * token)
 {
-	struct timeval tv;
-	long long cred, max_usec;
+    struct timeval tv;
+    long long cred, max_usec;
 
-	/* max time needed to refill up to cap */
+    /* max time needed to refill up to cap */
 
-	max_usec  = token->cap - token->cred;
-	max_usec *= 1000000;
-	max_usec += token->rate - 1;
-	max_usec /= token->rate;
+    max_usec = token->cap - token->cred;
+    max_usec *= 1000000;
+    max_usec += token->rate - 1;
+    max_usec /= token->rate;
 
-	/* actual credit gained */
+    /* actual credit gained */
 
-	timersub(&rlb->now, &rlb->ts, &tv);
+    timersub(&rlb->now, &rlb->ts, &tv);
 
-	cred  = rlb_tv_usec(&tv);
-	cred  = MIN(cred, max_usec);
-	cred *= token->rate;
-	cred /= 1000000;
+    cred = rlb_tv_usec(&tv);
+    cred = MIN(cred, max_usec);
+    cred *= token->rate;
+    cred /= 1000000;
 
-	/* up to cap */
+    /* up to cap */
 
-	token->cred += cred;
-	token->cred  = MIN(token->cred, token->cap);
+    token->cred += cred;
+    token->cred = MIN(token->cred, token->cap);
 }
 
-static void
-rlb_token_dispatch(td_rlb_t *rlb, void *data)
+static void rlb_token_dispatch(td_rlb_t * rlb, void *data)
 {
-	td_rlb_token_t *token = data;
-	td_rlb_conn_t *conn, *next;
+    td_rlb_token_t *token = data;
+    td_rlb_conn_t *conn, *next;
 
-	rlb_token_refill(rlb, token);
+    rlb_token_refill(rlb, token);
 
-	rlb_for_each_waiting_safe(conn, next, rlb) {
-		if (token->cred < 0)
-			break;
+    rlb_for_each_waiting_safe(conn, next, rlb) {
+        if (token->cred < 0)
+            break;
 
-		token->cred -= conn->need;
+        token->cred -= conn->need;
 
-		rlb_conn_respond(rlb, conn, conn->need);
-	}
+        rlb_conn_respond(rlb, conn, conn->need);
+    }
 }
 
-static void
-rlb_token_reset(td_rlb_t *rlb, void *data)
+static void rlb_token_reset(td_rlb_t * rlb, void *data)
 {
-	td_rlb_token_t *token = data;
+    td_rlb_token_t *token = data;
 
-	token->cred = token->cap;
+    token->cred = token->cap;
 }
 
-static void
-rlb_token_destroy(td_rlb_t *rlb, void *data)
+static void rlb_token_destroy(td_rlb_t * rlb, void *data)
 {
-	td_rlb_token_t *token = data;
+    td_rlb_token_t *token = data;
 
-	if (token)
-		free(token);
+    if (token)
+        free(token);
 }
 
 static int
-rlb_token_create(td_rlb_t *rlb, int argc, char **argv, void **data)
+rlb_token_create(td_rlb_t * rlb, int argc, char **argv, void **data)
 {
-	td_rlb_token_t *token;
-	int err;
+    td_rlb_token_t *token;
+    int err;
 
-	token = calloc(1, sizeof(*token));
-	if (!token) {
-		err = -ENOMEM;
-		goto fail;
-	}
+    token = calloc(1, sizeof(*token));
+    if (!token) {
+        err = -ENOMEM;
+        goto fail;
+    }
 
-	token->rate = 0;
-	token->cap  = 0;
+    token->rate = 0;
+    token->cap = 0;
 
-	do {
-		const struct option longopts[] = {
-			{ "rate",        1, NULL, 'r' },
-			{ "cap",         1, NULL, 'c' },
-			{ NULL,          0, NULL,  0  }
-		};
-		int c;
+    do {
+        const struct option longopts[] = {
+            {"rate", 1, NULL, 'r'},
+            {"cap", 1, NULL, 'c'},
+            {NULL, 0, NULL, 0}
+        };
+        int c;
 
-		c = getopt_long(argc, argv, "r:c:", longopts, NULL);
-		if (c < 0)
-			break;
+        c = getopt_long(argc, argv, "r:c:", longopts, NULL);
+        if (c < 0)
+            break;
 
-		switch (c) {
-		case 'r':
-			token->rate = rlb_strtol(optarg);
-			if (token->rate < 0) {
-				ERR("invalid --rate");
-				goto usage;
-			}
-			break;
+        switch (c) {
+        case 'r':
+            token->rate = rlb_strtol(optarg);
+            if (token->rate < 0) {
+                ERR("invalid --rate");
+                goto usage;
+            }
+            break;
 
-		case 'c':
-			token->cap = rlb_strtol(optarg);
-			if (token->cap < 0) {
-				ERR("invalid --cap");
-				goto usage;
-			}
-			break;
+        case 'c':
+            token->cap = rlb_strtol(optarg);
+            if (token->cap < 0) {
+                ERR("invalid --cap");
+                goto usage;
+            }
+            break;
 
-		case '?':
-			goto usage;
+        case '?':
+            goto usage;
 
-		default:
-			BUG();
-		}
-	} while (1);
+        default:
+            BUG();
+        }
+    } while (1);
 
-	if (!token->rate) {
-		ERR("--rate required");
-		goto usage;
-	}
+    if (!token->rate) {
+        ERR("--rate required");
+        goto usage;
+    }
 
-	rlb_token_reset(rlb, token);
+    rlb_token_reset(rlb, token);
 
-	*data = token;
+    *data = token;
 
-	return 0;
+    return 0;
 
-fail:
-	if (token)
-		free(token);
+  fail:
+    if (token)
+        free(token);
 
-	return err;
+    return err;
 
-usage:
-	err = -EINVAL;
-	goto fail;
+  usage:
+    err = -EINVAL;
+    goto fail;
 }
 
-static void
-rlb_token_usage(td_rlb_t *rlb, FILE *stream, void *data)
+static void rlb_token_usage(td_rlb_t * rlb, FILE * stream, void *data)
 {
-	fprintf(stream,
-		" {-t|--type}=token --"
-		" {-r|--rate}=<rate [KMG]>"
-		" {-c|--cap}=<size [KMG]>");
+    fprintf(stream,
+            " {-t|--type}=token --"
+            " {-r|--rate}=<rate [KMG]>" " {-c|--cap}=<size [KMG]>");
 }
 
-static void
-rlb_token_info(td_rlb_t *rlb, void *data)
+static void rlb_token_info(td_rlb_t * rlb, void *data)
 {
-	td_rlb_token_t *token = data;
+    td_rlb_token_t *token = data;
 
-	INFO("TOKEN: rate: %ld B/s cap: %ld B cred: %ld B",
-	     token->rate, token->cap, token->cred);
+    INFO("TOKEN: rate: %ld B/s cap: %ld B cred: %ld B",
+         token->rate, token->cap, token->cred);
 }
 
 static struct ratelimit_ops rlb_token_ops = {
-	.usage    = rlb_token_usage,
-	.create   = rlb_token_create,
-	.destroy  = rlb_token_destroy,
-	.info     = rlb_token_info,
+    .usage = rlb_token_usage,
+    .create = rlb_token_create,
+    .destroy = rlb_token_destroy,
+    .info = rlb_token_info,
 
-	.settimeo = rlb_token_settimeo,
-	.timeout  = rlb_token_dispatch,
-	.dispatch = rlb_token_dispatch,
-	.reset    = rlb_token_reset,
+    .settimeo = rlb_token_settimeo,
+    .timeout = rlb_token_dispatch,
+    .dispatch = rlb_token_dispatch,
+    .reset = rlb_token_reset,
 };
 
 /*
@@ -893,837 +864,812 @@ static struct ratelimit_ops rlb_token_ops = {
 typedef struct ratelimit_meminfo td_rlb_meminfo_t;
 
 struct ratelimit_meminfo {
-	unsigned int                   period;
-	struct timeval                 ts;
+    unsigned int period;
+    struct timeval ts;
 
-	FILE                          *s;
+    FILE *s;
 
-	unsigned long                  total;
-	unsigned long                  dirty;
-	unsigned long                  writeback;
+    unsigned long total;
+    unsigned long dirty;
+    unsigned long writeback;
 
-	unsigned int                   limit_hi;
-	unsigned int                   limit_lo;
-	unsigned int                   congested;
+    unsigned int limit_hi;
+    unsigned int limit_lo;
+    unsigned int congested;
 
-	struct rlb_valve               valve;
-	struct timeval                 timeo;
+    struct rlb_valve valve;
+    struct timeval timeo;
 };
 
-static void
-rlb_meminfo_info(td_rlb_t *rlb, void *data)
+static void rlb_meminfo_info(td_rlb_t * rlb, void *data)
 {
-	td_rlb_meminfo_t *m = data;
+    td_rlb_meminfo_t *m = data;
 
-	INFO("MEMINFO: lo/hi: %u/%u%% period: %u ms",
-	     m->limit_lo, m->limit_hi, m->period);
+    INFO("MEMINFO: lo/hi: %u/%u%% period: %u ms",
+         m->limit_lo, m->limit_hi, m->period);
 
-	INFO("MEMINFO: total %lu kB, dirty/writeback %lu/%lu kB",
-	     m->total, m->dirty, m->writeback);
+    INFO("MEMINFO: total %lu kB, dirty/writeback %lu/%lu kB",
+         m->total, m->dirty, m->writeback);
 
-	m->valve.ops->info(rlb, m->valve.data);
+    m->valve.ops->info(rlb, m->valve.data);
 }
 
-static void
-rlb_meminfo_close(td_rlb_meminfo_t *m)
+static void rlb_meminfo_close(td_rlb_meminfo_t * m)
 {
-	if (m->s) {
-		fclose(m->s);
-		m->s = NULL;
-	}
+    if (m->s) {
+        fclose(m->s);
+        m->s = NULL;
+    }
 }
 
-static int
-rlb_meminfo_open(td_rlb_meminfo_t *m)
+static int rlb_meminfo_open(td_rlb_meminfo_t * m)
 {
-	FILE *s;
-	int err;
+    FILE *s;
+    int err;
 
-	m->s = NULL;
+    m->s = NULL;
 
-	s = fopen("/proc/meminfo", "r");
-	if (!s) {
-		err = -errno;
-		goto fail;
-	}
+    s = fopen("/proc/meminfo", "r");
+    if (!s) {
+        err = -errno;
+        goto fail;
+    }
 
-	m->s = s;
+    m->s = s;
 
-	return 0;
+    return 0;
 
-fail:
-	rlb_meminfo_close(m);
-	return err;
+  fail:
+    rlb_meminfo_close(m);
+    return err;
 }
 
 static inline int __test_bit(int n, unsigned long *bitmap)
 {
-	return !!(*bitmap & (1UL<<n));
+    return ! !(*bitmap & (1UL << n));
 }
 
 static inline void __clear_bit(int n, unsigned long *bitmap)
 {
-	*bitmap &= ~(1UL<<n);
+    *bitmap &= ~(1UL << n);
 }
 
 static struct ratelimit_meminfo_scan {
-	const char    *format;
-	ptrdiff_t      ptrdiff;
+    const char *format;
+    ptrdiff_t ptrdiff;
 } rlb_meminfo_scanfs[] = {
-	{ "MemTotal:  %lu kB",
-	  offsetof(struct ratelimit_meminfo, total) },
-	{ "Dirty:     %lu kB",
-	  offsetof(struct ratelimit_meminfo, dirty) },
-	{ "Writeback: %lu kB",
-	  offsetof(struct ratelimit_meminfo, writeback) },
-};
+    {
+    "MemTotal:  %lu kB", offsetof(struct ratelimit_meminfo, total)}, {
+    "Dirty:     %lu kB", offsetof(struct ratelimit_meminfo, dirty)}, {
+"Writeback: %lu kB", offsetof(struct ratelimit_meminfo, writeback)},};
 
-static int
-rlb_meminfo_scan(td_rlb_meminfo_t *m)
+static int rlb_meminfo_scan(td_rlb_meminfo_t * m)
 {
-	const int n_keys = ARRAY_SIZE(rlb_meminfo_scanfs);
-	unsigned long pending;
-	int err;
+    const int n_keys = ARRAY_SIZE(rlb_meminfo_scanfs);
+    unsigned long pending;
+    int err;
 
-	err = rlb_meminfo_open(m);
-	if (err)
-		goto fail;
+    err = rlb_meminfo_open(m);
+    if (err)
+        goto fail;
 
-	pending = (1UL << n_keys) - 1;
+    pending = (1UL << n_keys) - 1;
 
-	do {
-		char buf[80], *b;
-		int i;
+    do {
+        char buf[80], *b;
+        int i;
 
-		b = fgets(buf, sizeof(buf), m->s);
-		if (!b)
-			break;
+        b = fgets(buf, sizeof(buf), m->s);
+        if (!b)
+            break;
 
-		for (i = 0; i < n_keys; i++) {
-			struct ratelimit_meminfo_scan *scan;
-			unsigned long val, *ptr;
-			int n;
+        for (i = 0; i < n_keys; i++) {
+            struct ratelimit_meminfo_scan *scan;
+            unsigned long val, *ptr;
+            int n;
 
-			if (!__test_bit(i, &pending))
-				continue;
+            if (!__test_bit(i, &pending))
+                continue;
 
-			scan = &rlb_meminfo_scanfs[i];
+            scan = &rlb_meminfo_scanfs[i];
 
-			n = sscanf(buf, scan->format, &val);
-			if (n != 1)
-				continue;
+            n = sscanf(buf, scan->format, &val);
+            if (n != 1)
+                continue;
 
-			ptr  = (void*)m + scan->ptrdiff;
-			*ptr = val;
+            ptr = (void *) m + scan->ptrdiff;
+            *ptr = val;
 
-			__clear_bit(i, &pending);
-		}
+            __clear_bit(i, &pending);
+        }
 
-	} while (pending);
+    } while (pending);
 
-	if (pending) {
-		err = -ESRCH;
-		goto fail;
-	}
+    if (pending) {
+        err = -ESRCH;
+        goto fail;
+    }
 
-	err = 0;
-fail:
-	rlb_meminfo_close(m);
-	return err;
+    err = 0;
+  fail:
+    rlb_meminfo_close(m);
+    return err;
 }
 
-static void
-rlb_meminfo_usage(td_rlb_t *rlb, FILE *stream, void *data)
+static void rlb_meminfo_usage(td_rlb_t * rlb, FILE * stream, void *data)
 {
-	td_rlb_meminfo_t *m = data;
+    td_rlb_meminfo_t *m = data;
 
-	fprintf(stream,
-		" {-t|--type}=meminfo "
-		" {-H|--high}=<percent> {-L|--low}=<percent>"
-		" {-p|--period}=<msecs> --");
+    fprintf(stream,
+            " {-t|--type}=meminfo "
+            " {-H|--high}=<percent> {-L|--low}=<percent>"
+            " {-p|--period}=<msecs> --");
 
-	if (m && m->valve.ops) {
-		m->valve.ops->usage(rlb, stream, m->valve.data);
-	} else
-		fprintf(stream, " {-t|--type}={...}");
+    if (m && m->valve.ops) {
+        m->valve.ops->usage(rlb, stream, m->valve.data);
+    } else
+        fprintf(stream, " {-t|--type}={...}");
 }
 
-static void
-rlb_meminfo_destroy(td_rlb_t *rlb, void *data)
+static void rlb_meminfo_destroy(td_rlb_t * rlb, void *data)
 {
-	td_rlb_meminfo_t *m = data;
+    td_rlb_meminfo_t *m = data;
 
-	if (m) {
-		if (m->valve.data) {
-			m->valve.ops->destroy(rlb, m->valve.data);
-			m->valve.data = NULL;
-		}
+    if (m) {
+        if (m->valve.data) {
+            m->valve.ops->destroy(rlb, m->valve.data);
+            m->valve.data = NULL;
+        }
 
-		free(m);
-	}
+        free(m);
+    }
 }
 
 static int
-rlb_meminfo_create(td_rlb_t *rlb, int argc, char **argv, void **data)
+rlb_meminfo_create(td_rlb_t * rlb, int argc, char **argv, void **data)
 {
-	td_rlb_meminfo_t *m;
-	const char *type;
-	long dbr;
-	int err;
+    td_rlb_meminfo_t *m;
+    const char *type;
+    long dbr;
+    int err;
 
-	m = calloc(1, sizeof(*m));
-	if (!m) {
-		PERROR("calloc");
-		err = -errno;
-		goto fail;
-	}
+    m = calloc(1, sizeof(*m));
+    if (!m) {
+        PERROR("calloc");
+        err = -errno;
+        goto fail;
+    }
 
-	type      = NULL;
-	m->period = 100;
+    type = NULL;
+    m->period = 100;
 
-	do {
-		const struct option longopts[] = {
-			{ "period",    1, NULL, 'p' },
-			{ "type",      1, NULL, 't' },
-			{ "high",      1, NULL, 'H' },
-			{ "low",       1, NULL, 'L' },
-			{ NULL,        0, NULL,  0  }
-		};
-		int c;
+    do {
+        const struct option longopts[] = {
+            {"period", 1, NULL, 'p'},
+            {"type", 1, NULL, 't'},
+            {"high", 1, NULL, 'H'},
+            {"low", 1, NULL, 'L'},
+            {NULL, 0, NULL, 0}
+        };
+        int c;
 
-		c = getopt_long(argc, argv, "p:t:H:L:", longopts, NULL);
-		if (c < 0)
-			break;
+        c = getopt_long(argc, argv, "p:t:H:L:", longopts, NULL);
+        if (c < 0)
+            break;
 
-		switch (c) {
-		case 'p':
-			m->period = rlb_strtol(optarg);
-			if (m->period < 0)
-				goto usage;
-			break;
+        switch (c) {
+        case 'p':
+            m->period = rlb_strtol(optarg);
+            if (m->period < 0)
+                goto usage;
+            break;
 
-		case 'H':
-			m->limit_hi = strtoul(optarg, NULL, 0);
-			break;
+        case 'H':
+            m->limit_hi = strtoul(optarg, NULL, 0);
+            break;
 
-		case 'L':
-			m->limit_lo = strtoul(optarg, NULL, 0);
-			break;
+        case 'L':
+            m->limit_lo = strtoul(optarg, NULL, 0);
+            break;
 
-		case 't':
-			type = optarg;
-			break;
+        case 't':
+            type = optarg;
+            break;
 
-		case '?':
-			goto usage;
+        case '?':
+            goto usage;
 
-		default:
-			BUG();
-		}
-	} while (1);
+        default:
+            BUG();
+        }
+    } while (1);
 
-	if (!m->limit_hi || !m->limit_lo) {
-		ERR("--high/--low required");
-		goto usage;
-	}
+    if (!m->limit_hi || !m->limit_lo) {
+        ERR("--high/--low required");
+        goto usage;
+    }
 
-	if (m->limit_lo >= m->limit_hi) {
-		ERR("invalid --high/--low ratio");
-		goto usage;
-	}
+    if (m->limit_lo >= m->limit_hi) {
+        ERR("invalid --high/--low ratio");
+        goto usage;
+    }
 
-	if (!type) {
-		ERR("(sub) --type required");
-		goto usage;
-	}
+    if (!type) {
+        ERR("(sub) --type required");
+        goto usage;
+    }
 
-	dbr = sysctl_strtoul("vm/dirty_background_ratio");
-	if (dbr < 0) {
-		err = dbr;
-		ERR("vm/dirty_background_ratio: %d", err);
-		goto fail;
-	}
+    dbr = sysctl_strtoul("vm/dirty_background_ratio");
+    if (dbr < 0) {
+        err = dbr;
+        ERR("vm/dirty_background_ratio: %d", err);
+        goto fail;
+    }
 
-	if (0 && m->limit_lo < dbr) {
-		ERR("--low %u is less than vm.dirty_background_ratio (= %ld)",
-		    m->limit_lo, dbr);
-		err = -EINVAL;
-		goto fail;
-	}
+    if (0 && m->limit_lo < dbr) {
+        ERR("--low %u is less than vm.dirty_background_ratio (= %ld)",
+            m->limit_lo, dbr);
+        err = -EINVAL;
+        goto fail;
+    }
 
-	*data = m;
+    *data = m;
 
-	rlb_argv_shift(&optind, &argc, &argv);
+    rlb_argv_shift(&optind, &argc, &argv);
 
-	err = rlb_create_valve(rlb, &m->valve, type, argc, argv);
-	if (err) {
-		if (err == -EINVAL)
-			goto usage;
-		goto fail;
-	}
+    err = rlb_create_valve(rlb, &m->valve, type, argc, argv);
+    if (err) {
+        if (err == -EINVAL)
+            goto usage;
+        goto fail;
+    }
 
-	err = rlb_meminfo_scan(m);
-	if (err) {
-		PERROR("/proc/meminfo");
-		goto fail;
-	}
+    err = rlb_meminfo_scan(m);
+    if (err) {
+        PERROR("/proc/meminfo");
+        goto fail;
+    }
 
-	return 0;
+    return 0;
 
-fail:
-	ERR("err = %d", err);
-	return err;
+  fail:
+    ERR("err = %d", err);
+    return err;
 
-usage:
-	err = -EINVAL;
-	return err;
+  usage:
+    err = -EINVAL;
+    return err;
 };
 
 static void
-rlb_meminfo_settimeo(td_rlb_t *rlb, struct timeval **_tv, void *data)
+rlb_meminfo_settimeo(td_rlb_t * rlb, struct timeval **_tv, void *data)
 {
-	td_rlb_meminfo_t *m = data;
-	int idle;
+    td_rlb_meminfo_t *m = data;
+    int idle;
 
-	idle = TAILQ_EMPTY(&rlb->wait);
-	BUG_ON(!idle && !m->congested);
+    idle = TAILQ_EMPTY(&rlb->wait);
+    BUG_ON(!idle && !m->congested);
 
-	if (m->congested) {
-		m->valve.ops->settimeo(rlb, _tv, m->valve.data);
-		return;
-	}
+    if (m->congested) {
+        m->valve.ops->settimeo(rlb, _tv, m->valve.data);
+        return;
+    }
 
-	*_tv = NULL;
+    *_tv = NULL;
 }
 
-static void
-rlb_meminfo_timeout(td_rlb_t *rlb, void *data)
+static void rlb_meminfo_timeout(td_rlb_t * rlb, void *data)
 {
-	td_rlb_meminfo_t *m = data;
+    td_rlb_meminfo_t *m = data;
 
-	WARN_ON(!m->congested);
+    WARN_ON(!m->congested);
 
-	if (m->congested)
-		m->valve.ops->timeout(rlb, m->valve.data);
+    if (m->congested)
+        m->valve.ops->timeout(rlb, m->valve.data);
 }
 
 static int
-rlb_meminfo_test_high(td_rlb_t *rlb, td_rlb_meminfo_t *m, long long cred)
+rlb_meminfo_test_high(td_rlb_t * rlb, td_rlb_meminfo_t * m, long long cred)
 {
-	long long lo;
+    long long lo;
 
-	if (m->congested) {
-		/* hysteresis */
+    if (m->congested) {
+        /* hysteresis */
 
-		lo  = m->total;
-		lo *= m->limit_lo;
-		lo /= 100;
+        lo = m->total;
+        lo *= m->limit_lo;
+        lo /= 100;
 
-		if (cred >= lo)
-			return 0;
+        if (cred >= lo)
+            return 0;
 
-	} else
-		if (cred <= 0) {
-			m->valve.ops->reset(rlb, m->valve.data);
-			return 1;
-		}
+    } else if (cred <= 0) {
+        m->valve.ops->reset(rlb, m->valve.data);
+        return 1;
+    }
 
-	return m->congested;
+    return m->congested;
 }
 
 static void
-rlb_meminfo_dispatch_low(td_rlb_t *rlb, td_rlb_meminfo_t *m,
-			 long long *_cred)
+rlb_meminfo_dispatch_low(td_rlb_t * rlb, td_rlb_meminfo_t * m,
+                         long long *_cred)
 {
-	td_rlb_conn_t *conn, *next;
-	long long cred = *_cred, grant;
+    td_rlb_conn_t *conn, *next;
+    long long cred = *_cred, grant;
 
-	rlb_for_each_waiting_safe(conn, next, rlb) {
+    rlb_for_each_waiting_safe(conn, next, rlb) {
 
-		if (cred <= 0)
-			break;
+        if (cred <= 0)
+            break;
 
-		grant = MIN(cred, conn->need);
+        grant = MIN(cred, conn->need);
 
-		rlb_conn_respond(rlb, conn, grant);
+        rlb_conn_respond(rlb, conn, grant);
 
-		cred -= grant;
-	}
+        cred -= grant;
+    }
 
-	*_cred = cred;
+    *_cred = cred;
 }
 
-static void
-rlb_meminfo_dispatch(td_rlb_t *rlb, void *data)
+static void rlb_meminfo_dispatch(td_rlb_t * rlb, void *data)
 {
-	td_rlb_meminfo_t *m = data;
-	long long us, hi, cred, dirty, pend;
+    td_rlb_meminfo_t *m = data;
+    long long us, hi, cred, dirty, pend;
 
-	/* we run only once per m->period */
+    /* we run only once per m->period */
 
-	us = rlb_usec_since(rlb, &m->ts);
-	if (us / 1000 > m->period) {
-		rlb_meminfo_scan(m);
-		m->ts = rlb->now;
-	}
+    us = rlb_usec_since(rlb, &m->ts);
+    if (us / 1000 > m->period) {
+        rlb_meminfo_scan(m);
+        m->ts = rlb->now;
+    }
 
-	/* uncongested credit:
-	   memory below hi watermark minus pending I/O */
+    /* uncongested credit:
+       memory below hi watermark minus pending I/O */
 
-	hi  = m->total;
-	hi *= m->limit_hi;
-	hi /= 100;
+    hi = m->total;
+    hi *= m->limit_hi;
+    hi /= 100;
 
-	dirty = m->dirty + m->writeback;
+    dirty = m->dirty + m->writeback;
 
-	cred  = hi - dirty;
-	cred *= 1000;
+    cred = hi - dirty;
+    cred *= 1000;
 
-	pend  = rlb_pending(rlb);
-	cred -= pend;
+    pend = rlb_pending(rlb);
+    cred -= pend;
 
-	m->congested = rlb_meminfo_test_high(rlb, m, cred);
+    m->congested = rlb_meminfo_test_high(rlb, m, cred);
 
-	DBG(3, "dirty=%lld (%lld) pend=%llu cred=%lld %s",
-	    dirty, dirty * 100 / m->total, pend, cred,
-	    m->congested ? "congested" : "");
+    DBG(3, "dirty=%lld (%lld) pend=%llu cred=%lld %s",
+        dirty, dirty * 100 / m->total, pend, cred,
+        m->congested ? "congested" : "");
 
-	if (!m->congested) {
-		rlb_meminfo_dispatch_low(rlb, m, &cred);
+    if (!m->congested) {
+        rlb_meminfo_dispatch_low(rlb, m, &cred);
 
-		m->congested = rlb_meminfo_test_high(rlb, m, cred);
-	}
+        m->congested = rlb_meminfo_test_high(rlb, m, cred);
+    }
 
-	if (m->congested)
-		m->valve.ops->dispatch(rlb, m->valve.data);
+    if (m->congested)
+        m->valve.ops->dispatch(rlb, m->valve.data);
 }
 
 static struct ratelimit_ops rlb_meminfo_ops = {
-	.usage    = rlb_meminfo_usage,
-	.create   = rlb_meminfo_create,
-	.destroy  = rlb_meminfo_destroy,
-	.info     = rlb_meminfo_info,
+    .usage = rlb_meminfo_usage,
+    .create = rlb_meminfo_create,
+    .destroy = rlb_meminfo_destroy,
+    .info = rlb_meminfo_info,
 
-	.settimeo = rlb_meminfo_settimeo,
-	.timeout  = rlb_meminfo_timeout,
-	.dispatch = rlb_meminfo_dispatch,
+    .settimeo = rlb_meminfo_settimeo,
+    .timeout = rlb_meminfo_timeout,
+    .dispatch = rlb_meminfo_dispatch,
 };
 
 /*
  * main loop
  */
 
-static void
-rlb_info(td_rlb_t *rlb)
+static void rlb_info(td_rlb_t * rlb)
 {
-	rlb->valve.ops->info(rlb, rlb->valve.data);
+    rlb->valve.ops->info(rlb, rlb->valve.data);
 
-	rlb_conn_infos(rlb);
+    rlb_conn_infos(rlb);
 }
 
 static sigset_t rlb_sigunblock;
 static sigset_t rlb_sigpending;
 
-static void
-rlb_sigmark(int signo)
+static void rlb_sigmark(int signo)
 {
-	INFO("Caught SIG%d", signo);
-	sigaddset(&rlb_sigpending, signo);
+    INFO("Caught SIG%d", signo);
+    sigaddset(&rlb_sigpending, signo);
 }
 
-static int
-rlb_siginit(void)
+static int rlb_siginit(void)
 {
-	struct sigaction sa_ignore  = { .sa_handler = SIG_IGN };
-	struct sigaction sa_pending = { .sa_handler = rlb_sigmark };
-	sigset_t sigmask;
-	int err = 0;
+    struct sigaction sa_ignore = {.sa_handler = SIG_IGN };
+    struct sigaction sa_pending = {.sa_handler = rlb_sigmark };
+    sigset_t sigmask;
+    int err = 0;
 
-	if (!err)
-		err = sigaction(SIGPIPE, &sa_ignore, NULL);
-	if (!err)
-		err = sigaction(SIGINT,  &sa_pending, NULL);
-	if (!err)
-		err = sigaction(SIGTERM, &sa_pending, NULL);
-	if (!err)
-		err = sigaction(SIGUSR1, &sa_pending, NULL);
-	if (err) {
-		err = -errno;
-		goto fail;
-	}
+    if (!err)
+        err = sigaction(SIGPIPE, &sa_ignore, NULL);
+    if (!err)
+        err = sigaction(SIGINT, &sa_pending, NULL);
+    if (!err)
+        err = sigaction(SIGTERM, &sa_pending, NULL);
+    if (!err)
+        err = sigaction(SIGUSR1, &sa_pending, NULL);
+    if (err) {
+        err = -errno;
+        goto fail;
+    }
 
-	sigemptyset(&sigmask);
-	sigaddset(&sigmask, SIGINT);
-	sigaddset(&sigmask, SIGTERM);
-	sigaddset(&sigmask, SIGUSR1);
+    sigemptyset(&sigmask);
+    sigaddset(&sigmask, SIGINT);
+    sigaddset(&sigmask, SIGTERM);
+    sigaddset(&sigmask, SIGUSR1);
 
-	err = sigprocmask(SIG_BLOCK, &sigmask, &rlb_sigunblock);
-	if (err) {
-		err = -errno;
-		goto fail;
-	}
+    err = sigprocmask(SIG_BLOCK, &sigmask, &rlb_sigunblock);
+    if (err) {
+        err = -errno;
+        goto fail;
+    }
 
-fail:
-	return err;
+  fail:
+    return err;
 }
 
-static int
-rlb_main_signaled(td_rlb_t *rlb)
+static int rlb_main_signaled(td_rlb_t * rlb)
 {
-	if (sigismember(&rlb_sigpending, SIGUSR1))
-		rlb_info(rlb);
+    if (sigismember(&rlb_sigpending, SIGUSR1))
+        rlb_info(rlb);
 
-	if (sigismember(&rlb_sigpending, SIGINT) ||
-	    sigismember(&rlb_sigpending, SIGTERM))
-		return -EINTR;
+    if (sigismember(&rlb_sigpending, SIGINT) ||
+        sigismember(&rlb_sigpending, SIGTERM))
+        return -EINTR;
 
-	return 0;
+    return 0;
 }
 
 
-static struct ratelimit_ops *
-rlb_find_valve(const char *name)
+static struct ratelimit_ops *rlb_find_valve(const char *name)
 {
-	struct ratelimit_ops *ops = NULL;
+    struct ratelimit_ops *ops = NULL;
 
-	switch (name[0]) {
+    switch (name[0]) {
 #if 0
-	case 'l':
-		if (!strcmp(name, "leaky"))
-			ops = &rlb_leaky_ops;
-		break;
+    case 'l':
+        if (!strcmp(name, "leaky"))
+            ops = &rlb_leaky_ops;
+        break;
 #endif
 
-	case 't':
-		if (!strcmp(name, "token"))
-			ops = &rlb_token_ops;
-		break;
+    case 't':
+        if (!strcmp(name, "token"))
+            ops = &rlb_token_ops;
+        break;
 
-	case 'm':
-		if (!strcmp(name, "meminfo"))
-			ops = &rlb_meminfo_ops;
-		break;
-	}
+    case 'm':
+        if (!strcmp(name, "meminfo"))
+            ops = &rlb_meminfo_ops;
+        break;
+    }
 
-	return ops;
+    return ops;
+}
+
+static int rlb_main_iterate(td_rlb_t * rlb)
+{
+    td_rlb_conn_t *conn, *next;
+    struct timeval *tv;
+    struct timespec _ts, *ts = &_ts;
+    int nfds, err;
+    fd_set rfds;
+
+    FD_ZERO(&rfds);
+    nfds = 0;
+
+    if (stdin) {
+        FD_SET(STDIN_FILENO, &rfds);
+        nfds = MAX(nfds, STDIN_FILENO);
+    }
+
+    if (rlb->sock >= 0) {
+        FD_SET(rlb->sock, &rfds);
+        nfds = MAX(nfds, rlb->sock);
+    }
+
+    rlb_for_each_conn(conn, rlb) {
+        FD_SET(conn->sock, &rfds);
+        nfds = MAX(nfds, conn->sock);
+    }
+
+    rlb->valve.ops->settimeo(rlb, &tv, rlb->valve.data);
+    if (tv) {
+        TIMEVAL_TO_TIMESPEC(tv, ts);
+    } else
+        ts = NULL;
+
+    rlb->ts = rlb->now;
+
+    nfds = pselect(nfds + 1, &rfds, NULL, NULL, ts, &rlb_sigunblock);
+    if (nfds < 0) {
+        err = -errno;
+        if (err != -EINTR)
+            PERROR("select");
+        goto fail;
+    }
+
+    gettimeofday(&rlb->now, NULL);
+
+    if (!nfds) {
+        BUG_ON(!ts);
+        rlb->valve.ops->timeout(rlb, rlb->valve.data);
+    }
+
+    if (nfds) {
+        rlb_for_each_conn_safe(conn, next, rlb)
+            if (FD_ISSET(conn->sock, &rfds)) {
+            rlb_conn_receive(rlb, conn);
+            if (!--nfds)
+                break;
+        }
+
+        rlb->valve.ops->dispatch(rlb, rlb->valve.data);
+    }
+
+    if (unlikely(nfds)) {
+        if (FD_ISSET(STDIN_FILENO, &rfds)) {
+            getc(stdin);
+            rlb_info(rlb);
+            nfds--;
+        }
+    }
+
+    if (unlikely(nfds)) {
+        if (FD_ISSET(rlb->sock, &rfds)) {
+            rlb_accept_conn(rlb);
+            nfds--;
+        }
+    }
+
+    BUG_ON(nfds);
+    err = 0;
+  fail:
+    return err;
+}
+
+static int rlb_main_run(td_rlb_t * rlb)
+{
+    int err;
+
+    do {
+        err = rlb_main_iterate(rlb);
+        if (err) {
+            if (err != -EINTR)
+                break;
+
+            err = rlb_main_signaled(rlb);
+            if (err) {
+                err = 0;
+                break;
+            }
+        }
+
+    } while (rlb->sock >= 0 || !TAILQ_EMPTY(&rlb->open));
+
+    return err;
+}
+
+static void rlb_shutdown(td_rlb_t * rlb)
+{
+    td_rlb_conn_t *conn, *next;
+
+    rlb_for_each_conn_safe(conn, next, rlb)
+        rlb_conn_close(rlb, conn);
+
+    rlb_sock_close(rlb);
+}
+
+static void rlb_usage(td_rlb_t * rlb, const char *prog, FILE * stream)
+{
+    fprintf(stream, "Usage: %s <name>", prog);
+
+    if (rlb && rlb->valve.ops)
+        rlb->valve.ops->usage(rlb, stream, rlb->valve.data);
+    else
+        fprintf(stream,
+                " {-t|--type}={token|meminfo}"
+                " [-h|--help] [-D|--debug=<n>]");
+
+    fprintf(stream, "\n");
+}
+
+static void rlb_destroy(td_rlb_t * rlb)
+{
+    rlb_shutdown(rlb);
+
+    if (rlb->valve.data) {
+        rlb->valve.ops->destroy(rlb, rlb->valve.data);
+        rlb->valve.data = NULL;
+    }
+
+    if (rlb->name) {
+        free(rlb->name);
+        rlb->name = NULL;
+    }
+}
+
+static int rlb_create(td_rlb_t * rlb, const char *name)
+{
+    int i, err;
+
+    memset(rlb, 0, sizeof(*rlb));
+    TAILQ_INIT(&rlb->open);
+    TAILQ_INIT(&rlb->wait);
+    rlb->sock = -1;
+
+    for (i = RLB_CONN_MAX - 1; i >= 0; i--)
+        rlb_conn_free(rlb, &rlb->connv[i]);
+
+    rlb->name = strdup(name);
+    if (!rlb->name) {
+        err = -errno;
+        goto fail;
+    }
+
+    err = rlb_sock_open(rlb);
+    if (err)
+        goto fail;
+
+    gettimeofday(&rlb->now, NULL);
+
+    return 0;
+
+  fail:
+    WARN("err = %d", err);
+    rlb_destroy(rlb);
+    return err;
 }
 
 static int
-rlb_main_iterate(td_rlb_t *rlb)
+rlb_create_valve(td_rlb_t * rlb, struct rlb_valve *v,
+                 const char *name, int argc, char **argv)
 {
-	td_rlb_conn_t *conn, *next;
-	struct timeval *tv;
-	struct timespec _ts, *ts = &_ts;
-	int nfds, err;
-	fd_set rfds;
+    struct ratelimit_ops *ops;
+    int err;
 
-	FD_ZERO(&rfds);
-	nfds = 0;
+    ops = rlb_find_valve(name);
+    if (!ops) {
+        ERR("No such driver: %s", name);
+        err = -ESRCH;
+        goto fail;
+    }
 
-	if (stdin) {
-		FD_SET(STDIN_FILENO, &rfds);
-		nfds = MAX(nfds, STDIN_FILENO);
-	}
+    v->ops = ops;
 
-	if (rlb->sock >= 0) {
-		FD_SET(rlb->sock, &rfds);
-		nfds = MAX(nfds, rlb->sock);
-	}
+    err = v->ops->create(rlb, argc, argv, &v->data);
 
-	rlb_for_each_conn(conn, rlb) {
-		FD_SET(conn->sock, &rfds);
-		nfds = MAX(nfds, conn->sock);
-	}
-
-	rlb->valve.ops->settimeo(rlb, &tv, rlb->valve.data);
-	if (tv) {
-		TIMEVAL_TO_TIMESPEC(tv, ts);
-	} else
-		ts = NULL;
-
-	rlb->ts = rlb->now;
-
-	nfds = pselect(nfds + 1, &rfds, NULL, NULL, ts, &rlb_sigunblock);
-	if (nfds < 0) {
-		err = -errno;
-		if (err != -EINTR)
-			PERROR("select");
-		goto fail;
-	}
-
-	gettimeofday(&rlb->now, NULL);
-
-	if (!nfds) {
-		BUG_ON(!ts);
-		rlb->valve.ops->timeout(rlb, rlb->valve.data);
-	}
-
-	if (nfds) {
-		rlb_for_each_conn_safe(conn, next, rlb)
-			if (FD_ISSET(conn->sock, &rfds)) {
-				rlb_conn_receive(rlb, conn);
-				if (!--nfds)
-					break;
-			}
-
-		rlb->valve.ops->dispatch(rlb, rlb->valve.data);
-	}
-
-	if (unlikely(nfds)) {
-		if (FD_ISSET(STDIN_FILENO, &rfds)) {
-			getc(stdin);
-			rlb_info(rlb);
-			nfds--;
-		}
-	}
-
-	if (unlikely(nfds)) {
-		if (FD_ISSET(rlb->sock, &rfds)) {
-			rlb_accept_conn(rlb);
-			nfds--;
-		}
-	}
-
-	BUG_ON(nfds);
-	err = 0;
-fail:
-	return err;
+  fail:
+    return err;
 }
 
-static int
-rlb_main_run(td_rlb_t *rlb)
+static void rlb_openlog(const char *name, int facility)
 {
-	int err;
+    static char ident[32];
 
-	do {
-		err = rlb_main_iterate(rlb);
-		if (err) {
-			if (err != -EINTR)
-				break;
+    snprintf(ident, sizeof(ident), "%s[%d]", name, getpid());
+    ident[sizeof(ident) - 1] = 0;
 
-			err = rlb_main_signaled(rlb);
-			if (err) {
-				err = 0;
-				break;
-			}
-		}
+    openlog(ident, 0, facility);
 
-	} while (rlb->sock >= 0 || !TAILQ_EMPTY(&rlb->open));
-
-	return err;
+    rlb_vlog = vsyslog;
 }
 
-static void
-rlb_shutdown(td_rlb_t *rlb)
+int main(int argc, char **argv)
 {
-	td_rlb_conn_t *conn, *next;
+    td_rlb_t _rlb, *rlb;
+    const char *prog, *type;
+    int err;
 
-	rlb_for_each_conn_safe(conn, next, rlb)
-		rlb_conn_close(rlb, conn);
+    setbuf(stdin, NULL);
+    setlinebuf(stderr);
 
-	rlb_sock_close(rlb);
-}
+    rlb = NULL;
+    prog = basename(argv[0]);
+    type = NULL;
+    rlb_vlog = rlb_vlog_vfprintf;
 
-static void
-rlb_usage(td_rlb_t *rlb, const char *prog, FILE *stream)
-{
-	fprintf(stream, "Usage: %s <name>", prog);
+    do {
+        const struct option longopts[] = {
+            {"help", 0, NULL, 'h'},
+            {"type", 1, NULL, 't'},
+            {"debug", 0, NULL, 'D'},
+            {NULL, 0, NULL, 0},
+        };
+        int c;
 
-	if (rlb && rlb->valve.ops)
-		rlb->valve.ops->usage(rlb, stream, rlb->valve.data);
-	else
-		fprintf(stream,
-			" {-t|--type}={token|meminfo}"
-			" [-h|--help] [-D|--debug=<n>]");
+        c = getopt_long(argc, argv, "ht:D:", longopts, NULL);
+        if (c < 0)
+            break;
 
-	fprintf(stream, "\n");
-}
+        switch (c) {
+        case 'h':
+            rlb_usage(NULL, prog, stdout);
+            return 0;
 
-static void
-rlb_destroy(td_rlb_t *rlb)
-{
-	rlb_shutdown(rlb);
+        case 't':
+            type = optarg;
+            break;
 
-	if (rlb->valve.data) {
-		rlb->valve.ops->destroy(rlb, rlb->valve.data);
-		rlb->valve.data = NULL;
-	}
+        case 'D':
+            debug = strtoul(optarg, NULL, 0);
+            break;
 
-	if (rlb->name) {
-		free(rlb->name);
-		rlb->name = NULL;
-	}
-}
+        case '?':
+            goto usage;
 
-static int
-rlb_create(td_rlb_t *rlb, const char *name)
-{
-	int i, err;
+        default:
+            BUG();
+        }
 
-	memset(rlb, 0, sizeof(*rlb));
-	TAILQ_INIT(&rlb->open);
-	TAILQ_INIT(&rlb->wait);
-	rlb->sock = -1;
+    } while (1);
 
-	for (i = RLB_CONN_MAX - 1; i >= 0; i--)
-		rlb_conn_free(rlb, &rlb->connv[i]);
+    if (!type)
+        goto usage;
 
-	rlb->name = strdup(name);
-	if (!rlb->name) {
-		err = -errno;
-		goto fail;
-	}
+    if (argc - optind < 1)
+        goto usage;
 
-	err = rlb_sock_open(rlb);
-	if (err)
-		goto fail;
+    err = rlb_siginit();
+    if (err)
+        goto fail;
 
-	gettimeofday(&rlb->now, NULL);
+    err = rlb_create(&_rlb, argv[optind++]);
+    if (err)
+        goto fail;
 
-	return 0;
+    rlb = &_rlb;
 
-fail:
-	WARN("err = %d", err);
-	rlb_destroy(rlb);
-	return err;
-}
+    rlb_argv_shift(&optind, &argc, &argv);
 
-static int
-rlb_create_valve(td_rlb_t *rlb, struct rlb_valve *v,
-		 const char *name, int argc, char **argv)
-{
-	struct ratelimit_ops *ops;
-	int err;
+    err = rlb_create_valve(rlb, &rlb->valve, type, argc, argv);
+    if (err) {
+        if (err == -EINVAL)
+            goto usage;
+        goto fail;
+    }
 
-	ops = rlb_find_valve(name);
-	if (!ops) {
-		ERR("No such driver: %s", name);
-		err = -ESRCH;
-		goto fail;
-	}
+    if (!debug) {
+        err = daemon(0, 0);
+        if (err)
+            goto fail;
 
-	v->ops = ops;
+        stdin = stdout = stderr = NULL;
+        rlb_openlog(prog, LOG_DAEMON);
+    }
 
-	err = v->ops->create(rlb, argc, argv, &v->data);
+    INFO("TD ratelimit bridge: %s, pid %d", rlb->path, getpid());
 
-fail:
-	return err;
-}
+    rlb_info(rlb);
 
-static void
-rlb_openlog(const char *name, int facility)
-{
-	static char ident[32];
+    err = rlb_main_run(rlb);
 
-	snprintf(ident, sizeof(ident), "%s[%d]", name, getpid());
-	ident[sizeof(ident)-1] = 0;
+    if (err)
+        INFO("Exiting with status %d", -err);
 
-	openlog(ident, 0, facility);
+  fail:
+    if (rlb)
+        rlb_destroy(rlb);
 
-	rlb_vlog = vsyslog;
-}
+    return -err;
 
-int
-main(int argc, char **argv)
-{
-	td_rlb_t _rlb, *rlb;
-	const char *prog, *type;
-	int err;
-
-	setbuf(stdin, NULL);
-	setlinebuf(stderr);
-
-	rlb      = NULL;
-	prog     = basename(argv[0]);
-	type     = NULL;
-	rlb_vlog = rlb_vlog_vfprintf;
-
-	do {
-		const struct option longopts[] = {
-			{ "help",        0, NULL, 'h' },
-			{ "type",        1, NULL, 't' },
-			{ "debug",       0, NULL, 'D' },
-			{ NULL,          0, NULL,  0  },
-		};
-		int c;
-
-		c = getopt_long(argc, argv, "ht:D:", longopts, NULL);
-		if (c < 0)
-			break;
-
-		switch (c) {
-		case 'h':
-			rlb_usage(NULL, prog, stdout);
-			return 0;
-
-		case 't':
-			type = optarg;
-			break;
-
-		case 'D':
-			debug = strtoul(optarg, NULL, 0);
-			break;
-
-		case '?':
-			goto usage;
-
-		default:
-			BUG();
-		}
-
-	} while (1);
-
-	if (!type)
-		goto usage;
-
-	if (argc - optind < 1)
-		goto usage;
-
-	err = rlb_siginit();
-	if (err)
-		goto fail;
-
-	err = rlb_create(&_rlb, argv[optind++]);
-	if (err)
-		goto fail;
-
-	rlb = &_rlb;
-
-	rlb_argv_shift(&optind, &argc, &argv);
-
-	err = rlb_create_valve(rlb, &rlb->valve, type, argc, argv);
-	if (err) {
-		if (err == -EINVAL)
-			goto usage;
-		goto fail;
-	}
-
-	if (!debug) {
-		err = daemon(0, 0);
-		if (err)
-			goto fail;
-
-		stdin = stdout = stderr = NULL;
-		rlb_openlog(prog, LOG_DAEMON);
-	}
-
-	INFO("TD ratelimit bridge: %s, pid %d", rlb->path, getpid());
-
-	rlb_info(rlb);
-
-	err = rlb_main_run(rlb);
-
-	if (err)
-		INFO("Exiting with status %d", -err);
-
-fail:
-	if (rlb)
-		rlb_destroy(rlb);
-
-	return -err;
-
-usage:
-	rlb_usage(rlb, prog, stderr);
-	err = -EINVAL;
-	goto fail;
+  usage:
+    rlb_usage(rlb, prog, stderr);
+    err = -EINVAL;
+    goto fail;
 }

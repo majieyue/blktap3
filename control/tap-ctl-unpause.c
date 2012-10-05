@@ -25,31 +25,30 @@
 
 #include "tap-ctl.h"
 
-int
-tap_ctl_unpause(const int id, const int minor, const char *params)
+int tap_ctl_unpause(const int id, const int minor, const char *params)
 {
-	int err;
-	tapdisk_message_t message;
+    int err;
+    tapdisk_message_t message;
 
-	memset(&message, 0, sizeof(message));
-	message.type = TAPDISK_MESSAGE_RESUME;
-	message.cookie = minor;
+    memset(&message, 0, sizeof(message));
+    message.type = TAPDISK_MESSAGE_RESUME;
+    message.cookie = minor;
 
-	if (params)
-		strncpy(message.u.params.path, params,
-			sizeof(message.u.params.path) - 1);
+    if (params)
+        strncpy(message.u.params.path, params,
+                sizeof(message.u.params.path) - 1);
 
-	err = tap_ctl_connect_send_and_receive(id, &message, NULL);
-	if (err)
-		return err;
+    err = tap_ctl_connect_send_and_receive(id, &message, NULL);
+    if (err)
+        return err;
 
-	if (message.type == TAPDISK_MESSAGE_RESUME_RSP)
-		err = message.u.response.error;
-	else {
-		err = EINVAL;
-		EPRINTF("got unexpected result '%s' from %d\n",
-			tapdisk_message_name(message.type), id);
-	}
+    if (message.type == TAPDISK_MESSAGE_RESUME_RSP)
+        err = message.u.response.error;
+    else {
+        err = EINVAL;
+        EPRINTF("got unexpected result '%s' from %d\n",
+                tapdisk_message_name(message.type), id);
+    }
 
-	return err;
+    return err;
 }

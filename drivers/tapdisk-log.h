@@ -38,7 +38,7 @@
 #include <stdarg.h>
 #include "blktap.h"
 
-int  tlog_open(const char *, int, int);
+int tlog_open(const char *, int, int);
 void tlog_close(void);
 void tlog_precious(void);
 void tlog_vsyslog(int, const char *, va_list);
@@ -66,4 +66,4 @@ void __tlog_error(const char *fmt, ...) __printf(1, 2);
 		tlog_error(_err, _f, ##_a);		\
 } while (0)
 
-#endif /* __TAPDISK_LOG_H__ */
+#endif                          /* __TAPDISK_LOG_H__ */

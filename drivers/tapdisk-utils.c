@@ -55,216 +55,213 @@
 
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 
-static int
-tapdisk_syslog_facility_by_name(const char *name)
+static int tapdisk_syslog_facility_by_name(const char *name)
 {
-	int facility;
-	CODE *c;
+    int facility;
+    CODE *c;
 
-	facility = -1;
+    facility = -1;
 
-	for (c = facilitynames; c->c_name != NULL; ++c)
-		if (!strcmp(c->c_name, name)) {
-			facility = c->c_val;
-			break;
-		}
+    for (c = facilitynames; c->c_name != NULL; ++c)
+        if (!strcmp(c->c_name, name)) {
+            facility = c->c_val;
+            break;
+        }
 
-	return facility;
+    return facility;
 }
 
-int
-tapdisk_syslog_facility(const char *arg)
+int tapdisk_syslog_facility(const char *arg)
 {
-	int facility;
-	char *endptr;
+    int facility;
+    char *endptr;
 
-	if (arg) {
-		facility = strtol(arg, &endptr, 0);
-		if (*endptr == 0)
-			return facility;
+    if (arg) {
+        facility = strtol(arg, &endptr, 0);
+        if (*endptr == 0)
+            return facility;
 
-		facility = tapdisk_syslog_facility_by_name(arg);
-		if (facility >= 0)
-			return facility;
-	}
+        facility = tapdisk_syslog_facility_by_name(arg);
+        if (facility >= 0)
+            return facility;
+    }
 
-	return LOG_DAEMON;
+    return LOG_DAEMON;
 }
 
-char*
-tapdisk_syslog_ident(const char *name)
+char *tapdisk_syslog_ident(const char *name)
 {
-	char ident[TD_SYSLOG_IDENT_MAX+1];
-	size_t size, len;
-	pid_t pid;
+    char ident[TD_SYSLOG_IDENT_MAX + 1];
+    size_t size, len;
+    pid_t pid;
 
-	pid  = getpid();
-	size = sizeof(ident);
-	len  = 0;
+    pid = getpid();
+    size = sizeof(ident);
+    len = 0;
 
-	len  = snprintf(NULL, 0, "[%d]", pid);
-	len  = snprintf(ident, size - len, "%s", name);
-	len += snprintf(ident + len, size - len, "[%d]", pid);
+    len = snprintf(NULL, 0, "[%d]", pid);
+    len = snprintf(ident, size - len, "%s", name);
+    len += snprintf(ident + len, size - len, "[%d]", pid);
 
-	return strdup(ident);
+    return strdup(ident);
 }
 
 size_t
-tapdisk_syslog_strftime(char *buf, size_t size, const struct timeval *tv)
+tapdisk_syslog_strftime(char *buf, size_t size, const struct timeval * tv)
 {
-	const char *mon[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-			      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-	struct tm tm;
+    const char *mon[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    };
+    struct tm tm;
 
-	/*
-	 * TIMESTAMP :=  <Mmm> " " <dd> " " <hh> ":" <mm> ":" <ss>.
-	 * Local time, no locales.
-	 */
+    /*
+     * TIMESTAMP :=  <Mmm> " " <dd> " " <hh> ":" <mm> ":" <ss>.
+     * Local time, no locales.
+     */
 
-	localtime_r(&tv->tv_sec, &tm);
+    localtime_r(&tv->tv_sec, &tm);
 
-	return snprintf(buf, size, "%s %2d %02d:%02d:%02d",
-			mon[tm.tm_mon], tm.tm_mday,
-			tm.tm_hour, tm.tm_min, tm.tm_sec);
+    return snprintf(buf, size, "%s %2d %02d:%02d:%02d",
+                    mon[tm.tm_mon], tm.tm_mday,
+                    tm.tm_hour, tm.tm_min, tm.tm_sec);
 }
 
 size_t
-tapdisk_syslog_strftv(char *buf, size_t size, const struct timeval *tv)
+tapdisk_syslog_strftv(char *buf, size_t size, const struct timeval * tv)
 {
-	struct tm tm;
+    struct tm tm;
 
-	localtime_r(&tv->tv_sec, &tm);
+    localtime_r(&tv->tv_sec, &tm);
 
-	return snprintf(buf, size, "[%02d:%02d:%02d.%03ld]",
-			tm.tm_hour, tm.tm_min, tm.tm_sec,
-			(long)tv->tv_usec / 1000);
+    return snprintf(buf, size, "[%02d:%02d:%02d.%03ld]",
+                    tm.tm_hour, tm.tm_min, tm.tm_sec,
+                    (long) tv->tv_usec / 1000);
 }
 
-int
-tapdisk_set_resource_limits(void)
+int tapdisk_set_resource_limits(void)
 {
-	int err;
-	struct rlimit rlim;
+    int err;
+    struct rlimit rlim;
 
-	rlim.rlim_cur = RLIM_INFINITY;
-	rlim.rlim_max = RLIM_INFINITY;
+    rlim.rlim_cur = RLIM_INFINITY;
+    rlim.rlim_max = RLIM_INFINITY;
 
-	err = setrlimit(RLIMIT_MEMLOCK, &rlim);
-	if (err == -1) {
-		EPRINTF("RLIMIT_MEMLOCK failed: %d\n", errno);
-		return -errno;
-	}
+    err = setrlimit(RLIMIT_MEMLOCK, &rlim);
+    if (err == -1) {
+        EPRINTF("RLIMIT_MEMLOCK failed: %d\n", errno);
+        return -errno;
+    }
 
-	err = mlockall(MCL_CURRENT | MCL_FUTURE);
-	if (err == -1) {
-		EPRINTF("mlockall failed: %d\n", errno);
-		return -errno;
-	}
-
+    err = mlockall(MCL_CURRENT | MCL_FUTURE);
+    if (err == -1) {
+        EPRINTF("mlockall failed: %d\n", errno);
+        return -errno;
+    }
 #define CORE_DUMP
 #if defined(CORE_DUMP)
-	err = setrlimit(RLIMIT_CORE, &rlim);
-	if (err == -1)
-		EPRINTF("RLIMIT_CORE failed: %d\n", errno);
+    err = setrlimit(RLIMIT_CORE, &rlim);
+    if (err == -1)
+        EPRINTF("RLIMIT_CORE failed: %d\n", errno);
 #endif
 
-	return 0;
+    return 0;
 }
 
-int
-tapdisk_namedup(char **dup, const char *name)
+int tapdisk_namedup(char **dup, const char *name)
 {
-	*dup = NULL;
+    *dup = NULL;
 
-	if (strnlen(name, MAX_NAME_LEN) >= MAX_NAME_LEN)
-		return -ENAMETOOLONG;
-	
-	*dup = strdup(name);
-	if (!*dup)
-		return -ENOMEM;
+    if (strnlen(name, MAX_NAME_LEN) >= MAX_NAME_LEN)
+        return -ENAMETOOLONG;
 
-	return 0;
+    *dup = strdup(name);
+    if (!*dup)
+        return -ENOMEM;
+
+    return 0;
 }
 
 /*Get Image size, secsize*/
 int
-tapdisk_get_image_size(int fd, uint64_t *_sectors, uint32_t *_sector_size)
+tapdisk_get_image_size(int fd, uint64_t * _sectors,
+                       uint32_t * _sector_size)
 {
-	struct stat stat;
-	uint64_t sectors, bytes;
-	uint32_t sector_size;
+    struct stat stat;
+    uint64_t sectors, bytes;
+    uint32_t sector_size;
 
-	sectors       = 0;
-	sector_size   = 0;
-	*_sectors     = 0;
-	*_sector_size = 0;
+    sectors = 0;
+    sector_size = 0;
+    *_sectors = 0;
+    *_sector_size = 0;
 
-	if (fstat(fd, &stat)) {
-		DPRINTF("ERROR: fstat failed, Couldn't stat image");
-		return -EINVAL;
-	}
+    if (fstat(fd, &stat)) {
+        DPRINTF("ERROR: fstat failed, Couldn't stat image");
+        return -EINVAL;
+    }
 
-	if (S_ISBLK(stat.st_mode)) {
-		/*Accessing block device directly*/
-		if (ioctl(fd,BLKGETSIZE64,&bytes)==0) {
-			sectors = bytes >> SECTOR_SHIFT;
-		} else if (ioctl(fd,BLKGETSIZE,&sectors)!=0) {
-			DPRINTF("ERR: BLKGETSIZE and BLKGETSIZE64 failed, couldn't stat image");
-			return -EINVAL;
-		}
+    if (S_ISBLK(stat.st_mode)) {
+        /*Accessing block device directly */
+        if (ioctl(fd, BLKGETSIZE64, &bytes) == 0) {
+            sectors = bytes >> SECTOR_SHIFT;
+        } else if (ioctl(fd, BLKGETSIZE, &sectors) != 0) {
+            DPRINTF
+                ("ERR: BLKGETSIZE and BLKGETSIZE64 failed, couldn't stat image");
+            return -EINVAL;
+        }
 
-		/*Get the sector size*/
+        /*Get the sector size */
 #if defined(BLKSSZGET)
-		{
-			sector_size = DEFAULT_SECTOR_SIZE;
-			ioctl(fd, BLKSSZGET, &sector_size);
+        {
+            sector_size = DEFAULT_SECTOR_SIZE;
+            ioctl(fd, BLKSSZGET, &sector_size);
 
-			if (sector_size != DEFAULT_SECTOR_SIZE)
-				DPRINTF("Note: sector size is %u (not %d)\n",
-					sector_size, DEFAULT_SECTOR_SIZE);
-		}
+            if (sector_size != DEFAULT_SECTOR_SIZE)
+                DPRINTF("Note: sector size is %u (not %d)\n",
+                        sector_size, DEFAULT_SECTOR_SIZE);
+        }
 #else
-		sector_size = DEFAULT_SECTOR_SIZE;
+        sector_size = DEFAULT_SECTOR_SIZE;
 #endif
 
-	} else {
-		/*Local file? try fstat instead*/
-		sectors     = (stat.st_size >> SECTOR_SHIFT);
-		sector_size = DEFAULT_SECTOR_SIZE;
-	}
+    } else {
+        /*Local file? try fstat instead */
+        sectors = (stat.st_size >> SECTOR_SHIFT);
+        sector_size = DEFAULT_SECTOR_SIZE;
+    }
 
-	if (sectors == 0) {		
-		sectors     = 16836057ULL;
-		sector_size = DEFAULT_SECTOR_SIZE;
-	}
+    if (sectors == 0) {
+        sectors = 16836057ULL;
+        sector_size = DEFAULT_SECTOR_SIZE;
+    }
 
-	return 0;
+    return 0;
 }
 
 #ifdef __linux__
 
 int tapdisk_linux_version(void)
 {
-	struct utsname uts;
-	unsigned int version, patchlevel, sublevel;
-	int n, err;
+    struct utsname uts;
+    unsigned int version, patchlevel, sublevel;
+    int n, err;
 
-	err = uname(&uts);
-	if (err)
-		return -errno;
+    err = uname(&uts);
+    if (err)
+        return -errno;
 
-	n = sscanf(uts.release, "%u.%u.%u", &version, &patchlevel, &sublevel);
-	if (n != 3)
-		return -ENOSYS;
+    n = sscanf(uts.release, "%u.%u.%u", &version, &patchlevel, &sublevel);
+    if (n != 3)
+        return -ENOSYS;
 
-	return KERNEL_VERSION(version, patchlevel, sublevel);
+    return KERNEL_VERSION(version, patchlevel, sublevel);
 }
 
 #else
 
 int tapdisk_linux_version(void)
 {
-	return -ENOSYS;
+    return -ENOSYS;
 }
 
 #endif

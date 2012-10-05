@@ -49,58 +49,58 @@
 #define TD_VBD_LOCKING              0x0080
 #define TD_VBD_LOG_DROPPED          0x0100
 
-#define TD_VBD_SECONDARY_DISABLED   0 
+#define TD_VBD_SECONDARY_DISABLED   0
 #define TD_VBD_SECONDARY_MIRROR     1
 #define TD_VBD_SECONDARY_STANDBY    2
 
 TAILQ_HEAD(tqh_td_vbd_handle, td_vbd_handle);
 
 struct td_vbd_handle {
-	char                       *name;
+    char *name;
 
-	td_blktap_t                *tap;
+    td_blktap_t *tap;
 
-	td_uuid_t                   uuid;
+    td_uuid_t uuid;
 
-	td_flag_t                   flags;
-	td_flag_t                   state;
+    td_flag_t flags;
+    td_flag_t state;
 
-	struct tqh_td_image_handle	images;
+    struct tqh_td_image_handle images;
 
-	int                         parent_devnum;
-	char                       *secondary_name;
-	td_image_t                 *secondary;
-	uint8_t                     secondary_mode;
+    int parent_devnum;
+    char *secondary_name;
+    td_image_t *secondary;
+    uint8_t secondary_mode;
 
-	/* FIXME ??? */
-	int                         FIXME_enospc_redirect_count_enabled;
-	uint64_t                    FIXME_enospc_redirect_count;
+    /* FIXME ??? */
+    int FIXME_enospc_redirect_count_enabled;
+    uint64_t FIXME_enospc_redirect_count;
 
-	/* when we encounter ENOSPC on the primary leaf image in mirror mode, 
-	 * we need to remove it from the VBD chain so that writes start going 
-	 * on the secondary leaf. However, we cannot free the image at that 
-	 * time since it might still have in-flight treqs referencing it.  
-	 * Therefore, we move it into 'retired' until shutdown. */
-	td_image_t                 *retired;
+    /* when we encounter ENOSPC on the primary leaf image in mirror mode, 
+     * we need to remove it from the VBD chain so that writes start going 
+     * on the secondary leaf. However, we cannot free the image at that 
+     * time since it might still have in-flight treqs referencing it.  
+     * Therefore, we move it into 'retired' until shutdown. */
+    td_image_t *retired;
 
-	struct tqh_td_vbd_request	new_requests;
-	struct tqh_td_vbd_request	pending_requests;
-	struct tqh_td_vbd_request	failed_requests;
-	struct tqh_td_vbd_request	completed_requests;
+    struct tqh_td_vbd_request new_requests;
+    struct tqh_td_vbd_request pending_requests;
+    struct tqh_td_vbd_request failed_requests;
+    struct tqh_td_vbd_request completed_requests;
 
-	td_vbd_request_t            request_list[MAX_REQUESTS]; /* XXX */
+    td_vbd_request_t request_list[MAX_REQUESTS];    /* XXX */
 
-	TAILQ_ENTRY(td_vbd_handle)	entry;
+     TAILQ_ENTRY(td_vbd_handle) entry;
 
-	struct timeval              ts;
+    struct timeval ts;
 
-	uint64_t                    received;
-	uint64_t                    returned;
-	uint64_t                    kicked;
-	uint64_t                    secs_pending;
-	uint64_t                    retries;
-	uint64_t                    errors;
-	td_sector_count_t           secs;
+    uint64_t received;
+    uint64_t returned;
+    uint64_t kicked;
+    uint64_t secs_pending;
+    uint64_t retries;
+    uint64_t errors;
+    td_sector_count_t secs;
 };
 
 #define tapdisk_vbd_for_each_request(vreq, tmp, list)	                \
@@ -114,56 +114,54 @@ struct td_vbd_handle {
  * one.
  */
 static inline void
-tapdisk_vbd_move_request(td_vbd_request_t *vreq,
-		struct tqh_td_vbd_request *dest)
+tapdisk_vbd_move_request(td_vbd_request_t * vreq,
+                         struct tqh_td_vbd_request *dest)
 {
-	TAILQ_REMOVE(vreq->list_head, vreq, next);
-	TAILQ_INSERT_TAIL(dest, vreq, next);
-	vreq->list_head = dest;
+    TAILQ_REMOVE(vreq->list_head, vreq, next);
+    TAILQ_INSERT_TAIL(dest, vreq, next);
+    vreq->list_head = dest;
 }
 
 static inline void
-tapdisk_vbd_add_image(td_vbd_t *vbd, td_image_t *image)
+tapdisk_vbd_add_image(td_vbd_t * vbd, td_image_t * image)
 {
-	TAILQ_INSERT_TAIL(&vbd->images, image, entry);
+    TAILQ_INSERT_TAIL(&vbd->images, image, entry);
 }
 
 static inline int
-tapdisk_vbd_is_last_image(td_vbd_t *vbd, td_image_t *image)
+tapdisk_vbd_is_last_image(td_vbd_t * vbd, td_image_t * image)
 {
-	return TAILQ_LAST(&vbd->images, tqh_td_image_handle) == image;
+    return TAILQ_LAST(&vbd->images, tqh_td_image_handle) == image;
 }
 
 /**
  * Retrieves the first image of this VBD.
  */
-static inline td_image_t *
-tapdisk_vbd_first_image(td_vbd_t *vbd)
+static inline td_image_t *tapdisk_vbd_first_image(td_vbd_t * vbd)
 {
-	td_image_t *image = NULL;
-	if (!TAILQ_EMPTY(&vbd->images))
-		image = TAILQ_FIRST(&vbd->images);
-	return image;
+    td_image_t *image = NULL;
+    if (!TAILQ_EMPTY(&vbd->images))
+        image = TAILQ_FIRST(&vbd->images);
+    return image;
 }
 
-static inline td_image_t *
-tapdisk_vbd_last_image(td_vbd_t *vbd)
+static inline td_image_t *tapdisk_vbd_last_image(td_vbd_t * vbd)
 {
-	td_image_t *image = NULL;
-	if (!TAILQ_EMPTY(&vbd->images))
-		image = TAILQ_LAST(&vbd->images, tqh_td_image_handle);
-	return image;
+    td_image_t *image = NULL;
+    if (!TAILQ_EMPTY(&vbd->images))
+        image = TAILQ_LAST(&vbd->images, tqh_td_image_handle);
+    return image;
 }
 
-static inline td_image_t *
-tapdisk_vbd_next_image(td_image_t *image)
+static inline td_image_t *tapdisk_vbd_next_image(td_image_t * image)
 {
-	return TAILQ_NEXT(image, entry);
+    return TAILQ_NEXT(image, entry);
 }
 
 td_vbd_t *tapdisk_vbd_create(td_uuid_t);
 int tapdisk_vbd_initialize(int, int, td_uuid_t);
-int tapdisk_vbd_open(td_vbd_t *, const char *, int, const char *, td_flag_t);
+int tapdisk_vbd_open(td_vbd_t *, const char *, int, const char *,
+                     td_flag_t);
 int tapdisk_vbd_close(td_vbd_t *);
 
 /**
@@ -175,8 +173,8 @@ int tapdisk_vbd_close(td_vbd_t *);
  * @param prt_devnum parent device number
  * @returns 0 on success
  */
-int tapdisk_vbd_open_vdi(td_vbd_t *vbd, const char *name, td_flag_t flags,
-		int prt_devnum);
+int tapdisk_vbd_open_vdi(td_vbd_t * vbd, const char *name, td_flag_t flags,
+                         int prt_devnum);
 
 /**
  * Closes a VDI.

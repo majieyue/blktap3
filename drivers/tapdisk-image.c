@@ -57,170 +57,169 @@
 		BUG();						\
 	}
 
-td_image_t *
-tapdisk_image_allocate(const char *file, const int type, const td_flag_t flags)
+td_image_t *tapdisk_image_allocate(const char *file, const int type,
+                                   const td_flag_t flags)
 {
-	int err;
-	td_image_t *image;
+    int err;
+    td_image_t *image;
 
-	image = calloc(1, sizeof(td_image_t));
-	if (!image)
-		return NULL;
+    image = calloc(1, sizeof(td_image_t));
+    if (!image)
+        return NULL;
 
-	err = tapdisk_namedup(&image->name, file);
-	if (err) {
-		free(image);
-		return NULL;
-	}
+    err = tapdisk_namedup(&image->name, file);
+    if (err) {
+        free(image);
+        return NULL;
+    }
 
-	image->type    = type;
-	image->flags   = flags;
+    image->type = type;
+    image->flags = flags;
 
-	return image;
+    return image;
 }
 
 void
-tapdisk_image_free(td_image_t *image, struct tqh_td_image_handle *head)
+tapdisk_image_free(td_image_t * image, struct tqh_td_image_handle *head)
 {
-	if (!image)
-		return;
+    if (!image)
+        return;
 
-	if (head)
-		TAILQ_REMOVE(head, image, entry);
+    if (head)
+        TAILQ_REMOVE(head, image, entry);
 
-	free(image->name);
-	tapdisk_driver_free(image->driver);
-	free(image);
+    free(image->name);
+    tapdisk_driver_free(image->driver);
+    free(image);
+}
+
+int tapdisk_image_check_td_request(td_image_t * image, td_request_t treq)
+{
+    int rdonly, err;
+    td_disk_info_t *info;
+
+    err = -EINVAL;
+
+    info = &image->info;
+    rdonly = td_flag_test(image->flags, TD_OPEN_RDONLY);
+
+    if (treq.op != TD_OP_READ && treq.op != TD_OP_WRITE)
+        goto fail;
+
+    if (treq.op == TD_OP_WRITE && rdonly) {
+        err = -EPERM;
+        goto fail;
+    }
+
+    if (treq.secs <= 0 || treq.sec + treq.secs > info->size)
+        goto fail;
+
+    return 0;
+
+  fail:
+    ERR(err, "bad td request on %s (%s, %" PRIu64 "): %d at %" PRIu64,
+        image->name, (rdonly ? "ro" : "rw"), info->size, treq.op,
+        treq.sec + treq.secs);
+    return err;
+
 }
 
 int
-tapdisk_image_check_td_request(td_image_t *image, td_request_t treq)
+tapdisk_image_check_request(td_image_t * image, td_vbd_request_t * vreq)
 {
-	int rdonly, err;
-	td_disk_info_t *info;
+    td_driver_t *driver;
+    td_disk_info_t *info;
+    int i, rdonly, secs, err;
 
-	err = -EINVAL;
+    driver = image->driver;
+    if (!driver)
+        return -ENODEV;
 
-	info   = &image->info;
-	rdonly = td_flag_test(image->flags, TD_OPEN_RDONLY);
+    info = &driver->info;
+    rdonly = td_flag_test(image->flags, TD_OPEN_RDONLY);
 
-	if (treq.op != TD_OP_READ && treq.op != TD_OP_WRITE)
-		goto fail;
+    secs = 0;
 
-	if (treq.op == TD_OP_WRITE && rdonly) {
-		err = -EPERM;
-		goto fail;
-	}
+    if (vreq->iovcnt < 0) {
+        err = -EINVAL;
+        goto fail;
+    }
 
-	if (treq.secs <= 0 || treq.sec + treq.secs > info->size)
-		goto fail;
+    for (i = 0; i < vreq->iovcnt; i++)
+        secs += vreq->iov[i].secs;
 
-	return 0;
+    switch (vreq->op) {
+    case TD_OP_WRITE:
+        if (rdonly) {
+            err = -EPERM;
+            goto fail;
+        }
+        /* continue */
+    case TD_OP_READ:
+        if (vreq->sec + secs > info->size) {
+            err = -EINVAL;
+            goto fail;
+        }
+        break;
+    default:
+        err = -EOPNOTSUPP;
+        goto fail;
+    }
 
-fail:
-	ERR(err, "bad td request on %s (%s, %"PRIu64"): %d at %"PRIu64,
-	    image->name, (rdonly ? "ro" : "rw"), info->size, treq.op,
-	    treq.sec + treq.secs);
-	return err;
+    return 0;
 
-}
+  fail:
+    ERR(err,
+        "bad request on %s (%s, %" PRIu64 "): req %s op %d at %" PRIu64,
+        image->name, (rdonly ? "ro" : "rw"), info->size, vreq->name,
+        vreq->op, vreq->sec + secs);
 
-int
-tapdisk_image_check_request(td_image_t *image, td_vbd_request_t *vreq)
-{
-	td_driver_t *driver;
-	td_disk_info_t *info;
-	int i, rdonly, secs, err;
-
-	driver = image->driver;
-	if (!driver)
-		return -ENODEV;
-
-	info   = &driver->info;
-	rdonly = td_flag_test(image->flags, TD_OPEN_RDONLY);
-
-	secs = 0;
-
-	if (vreq->iovcnt < 0) {
-		err = -EINVAL;
-		goto fail;
-	}
-
-	for (i = 0; i < vreq->iovcnt; i++)
-		secs += vreq->iov[i].secs;
-
-	switch (vreq->op) {
-	case TD_OP_WRITE:
-		if (rdonly) {
-			err = -EPERM;
-			goto fail;
-		}
-		/* continue */
-	case TD_OP_READ:
-		if (vreq->sec + secs > info->size) {
-			err = -EINVAL;
-			goto fail;
-		}
-		break;
-	default:
-		err = -EOPNOTSUPP;
-		goto fail;
-	}
-
-	return 0;
-
-fail:
-	ERR(err, "bad request on %s (%s, %"PRIu64"): req %s op %d at %"PRIu64,
-	    image->name, (rdonly ? "ro" : "rw"), info->size, vreq->name,
-	    vreq->op, vreq->sec + secs);
-
-	return err;
+    return err;
 }
 
 void
-tapdisk_image_close(td_image_t *image, struct tqh_td_image_handle *head)
+tapdisk_image_close(td_image_t * image, struct tqh_td_image_handle *head)
 {
-	td_close(image);
-	tapdisk_image_free(image, head);
+    td_close(image);
+    tapdisk_image_free(image, head);
 }
 
 int
 tapdisk_image_open(const int type, const char *name, const int flags,
-		td_image_t **_image)
+                   td_image_t ** _image)
 {
-	td_image_t *image;
-	int err;
+    td_image_t *image;
+    int err;
 
-	image = tapdisk_image_allocate(name, type, flags);
-	if (!image) {
-		err = -ENOMEM;
-		goto fail;
-	}
+    image = tapdisk_image_allocate(name, type, flags);
+    if (!image) {
+        err = -ENOMEM;
+        goto fail;
+    }
 
-	err = td_load(image);
-	if (!err)
-		goto done;
+    err = td_load(image);
+    if (!err)
+        goto done;
 
-	image->driver = tapdisk_driver_allocate(image->type,
-						image->name,
-						image->flags);
-	if (!image->driver) {
-		err = -ENOMEM;
-		goto fail;
-	}
+    image->driver = tapdisk_driver_allocate(image->type,
+                                            image->name, image->flags);
+    if (!image->driver) {
+        err = -ENOMEM;
+        goto fail;
+    }
 
-	err = td_open(image);
-	if (err)
-		goto fail;
+    err = td_open(image);
+    if (err)
+        goto fail;
 
-done:
-	*_image = image;
-	return 0;
+  done:
+    *_image = image;
+    return 0;
 
-fail:
-	if (image)
-		tapdisk_image_close(image, NULL);
-	return err;
+  fail:
+    if (image)
+        tapdisk_image_close(image, NULL);
+    return err;
 }
 
 /**
@@ -231,30 +230,30 @@ fail:
  * @returns 0 on success
  */
 static int
-tapdisk_image_open_parent(td_image_t *image, td_image_t **_parent)
+tapdisk_image_open_parent(td_image_t * image, td_image_t ** _parent)
 {
-	td_image_t *parent = NULL;
-	td_disk_id_t id;
-	int err;
+    td_image_t *parent = NULL;
+    td_disk_id_t id;
+    int err;
 
-	memset(&id, 0, sizeof(id));
-	id.flags = image->flags;
+    memset(&id, 0, sizeof(id));
+    id.flags = image->flags;
 
-	err = td_get_parent_id(image, &id);
-	if (err == TD_NO_PARENT) {
-		err = 0;
-		goto out;
-	}
-	if (err)
-		return err;
+    err = td_get_parent_id(image, &id);
+    if (err == TD_NO_PARENT) {
+        err = 0;
+        goto out;
+    }
+    if (err)
+        return err;
 
-	err = tapdisk_image_open(id.type, id.name, id.flags, &parent);
-	if (err)
-		return err;
+    err = tapdisk_image_open(id.type, id.name, id.flags, &parent);
+    if (err)
+        return err;
 
-out:
-	*_parent = parent;
-	return 0;
+  out:
+    *_parent = parent;
+    return 0;
 }
 
 /**
@@ -265,32 +264,32 @@ out:
  * @returns 0 on success
  */
 static int
-tapdisk_image_open_parents(td_image_t *image, struct tqh_td_image_handle *head)
+tapdisk_image_open_parents(td_image_t * image,
+                           struct tqh_td_image_handle *head)
 {
-	td_image_t *parent;
-	int err;
+    td_image_t *parent;
+    int err;
 
-	do {
-		err = tapdisk_image_open_parent(image, &parent);
-		if (err)
-			break;
+    do {
+        err = tapdisk_image_open_parent(image, &parent);
+        if (err)
+            break;
 
-		if (parent) {
-			TAILQ_INSERT_AFTER(head, image, parent, entry);
-			image = parent;
-		}
-	} while (parent);
+        if (parent) {
+            TAILQ_INSERT_AFTER(head, image, parent, entry);
+            image = parent;
+        }
+    } while (parent);
 
-	return err;
+    return err;
 }
 
-void
-tapdisk_image_close_chain(struct tqh_td_image_handle *list)
+void tapdisk_image_close_chain(struct tqh_td_image_handle *list)
 {
-	td_image_t *image, *next;
+    td_image_t *image, *next;
 
-	tapdisk_for_each_image_safe(image, next, list)
-		tapdisk_image_close(image, list);
+    tapdisk_for_each_image_safe(image, next, list)
+        tapdisk_image_close(image, list);
 }
 
 /**
@@ -305,273 +304,272 @@ tapdisk_image_close_chain(struct tqh_td_image_handle *list)
  */
 static int
 __tapdisk_image_open_chain(int type, const char *name, int flags,
-			   struct tqh_td_image_handle *_head, int prt_devnum)
+                           struct tqh_td_image_handle *_head,
+                           int prt_devnum)
 {
-	struct tqh_td_image_handle head = TAILQ_HEAD_INITIALIZER(head);
-	td_image_t *image;
-	int err;
+    struct tqh_td_image_handle head = TAILQ_HEAD_INITIALIZER(head);
+    td_image_t *image;
+    int err;
 
-	err = tapdisk_image_open(type, name, flags, &image);
-	if (err)
-		goto fail;
+    err = tapdisk_image_open(type, name, flags, &image);
+    if (err)
+        goto fail;
 
-	TAILQ_INSERT_TAIL(&head, image, entry);
+    TAILQ_INSERT_TAIL(&head, image, entry);
 
-	if (unlikely(prt_devnum >= 0)) {
-		char dev[32];
-		snprintf(dev, sizeof(dev),
-			 "%s%d", BLKTAP3_IO_DEVICE, prt_devnum);
-		err = tapdisk_image_open(DISK_TYPE_AIO, dev,
-					 flags|TD_OPEN_RDONLY, &image);
-		if (err)
-			goto fail;
+    if (unlikely(prt_devnum >= 0)) {
+        char dev[32];
+        snprintf(dev, sizeof(dev), "%s%d", BLKTAP3_IO_DEVICE, prt_devnum);
+        err = tapdisk_image_open(DISK_TYPE_AIO, dev,
+                                 flags | TD_OPEN_RDONLY, &image);
+        if (err)
+            goto fail;
 
-		TAILQ_INSERT_TAIL(&head, image, entry);
-		goto done;
-	}
+        TAILQ_INSERT_TAIL(&head, image, entry);
+        goto done;
+    }
 
-	err = tapdisk_image_open_parents(image, &head);
-	if (err)
-		goto fail;
+    err = tapdisk_image_open_parents(image, &head);
+    if (err)
+        goto fail;
 
-done:
-	TAILQ_CONCAT(&head, _head, entry);
-	return 0;
+  done:
+    TAILQ_CONCAT(&head, _head, entry);
+    return 0;
 
-fail:
-	tapdisk_image_close_chain(&head);
-	return err;
+  fail:
+    tapdisk_image_close_chain(&head);
+    return err;
 }
 
-static int
-tapdisk_image_parse_flags(char *args, unsigned long *_flags)
+static int tapdisk_image_parse_flags(char *args, unsigned long *_flags)
 {
-	unsigned long flags = 0;
-	char *token;
+    unsigned long flags = 0;
+    char *token;
 
-	BUG_ON(!args);
+    BUG_ON(!args);
 
-	do {
-		token = strtok(args, ",");
-		if (!token)
-			break;
+    do {
+        token = strtok(args, ",");
+        if (!token)
+            break;
 
-		switch (token[0]) {
-		case 'r':
-			if (!strcmp(token, "ro")) {
-				flags |= TD_OPEN_RDONLY;
-				break;
-			}
-			goto fail;
+        switch (token[0]) {
+        case 'r':
+            if (!strcmp(token, "ro")) {
+                flags |= TD_OPEN_RDONLY;
+                break;
+            }
+            goto fail;
 
-		default:
-			goto fail;
-		}
+        default:
+            goto fail;
+        }
 
-		args = NULL;
-	} while (1);
+        args = NULL;
+    } while (1);
 
-	*_flags |= flags;
+    *_flags |= flags;
 
-	return 0;
+    return 0;
 
-fail:
-	ERR(-EINVAL, "Invalid token '%s'", token);
-	return -EINVAL;
+  fail:
+    ERR(-EINVAL, "Invalid token '%s'", token);
+    return -EINVAL;
 }
 
 /**
  * TODO opens the image chain?
  */
 static int
-tapdisk_image_open_x_chain(const char *path, struct tqh_td_image_handle *_head)
+tapdisk_image_open_x_chain(const char *path,
+                           struct tqh_td_image_handle *_head)
 {
-	struct tqh_td_image_handle head = TAILQ_HEAD_INITIALIZER(head);
-	td_image_t *image = NULL, *next;
-	regex_t _im, *im = NULL, _ws, *ws = NULL;
-	FILE *s;
-	int err;
+    struct tqh_td_image_handle head = TAILQ_HEAD_INITIALIZER(head);
+    td_image_t *image = NULL, *next;
+    regex_t _im, *im = NULL, _ws, *ws = NULL;
+    FILE *s;
+    int err;
 
-	s = fopen(path, "r");
-	if (!s) {
-		err = -errno;
-		goto fail;
-	}
+    s = fopen(path, "r");
+    if (!s) {
+        err = -errno;
+        goto fail;
+    }
 
-	err = regcomp(&_ws, "^[:space:]*$", REG_NOSUB);
-	if (err)
-		goto fail;
-	ws = &_ws;
+    err = regcomp(&_ws, "^[:space:]*$", REG_NOSUB);
+    if (err)
+        goto fail;
+    ws = &_ws;
 
-	err = regcomp(&_im,
-		      "^([^:]+):([^ \t]+)([ \t]+([a-z,]+))?",
-		      REG_EXTENDED|REG_NEWLINE);
-	if (err)
-		goto fail;
-	im = &_im;
+    err = regcomp(&_im,
+                  "^([^:]+):([^ \t]+)([ \t]+([a-z,]+))?",
+                  REG_EXTENDED | REG_NEWLINE);
+    if (err)
+        goto fail;
+    im = &_im;
 
-	do {
-		char line[512], *l;
-		regmatch_t match[5];
-		char *typename, *path, *args = NULL;
-		unsigned long flags;
-		int type;
+    do {
+        char line[512], *l;
+        regmatch_t match[5];
+        char *typename, *path, *args = NULL;
+        unsigned long flags;
+        int type;
 
-		l = fgets(line, sizeof(line), s);
-		if (!l)
-			break;
+        l = fgets(line, sizeof(line), s);
+        if (!l)
+            break;
 
-		err = regexec(im, line, ARRAY_SIZE(match), match, 0);
-		if (err) {
-			err = regexec(ws, line, ARRAY_SIZE(match), match, 0);
-			if (!err)
-				continue;
-			err = -EINVAL;
-			goto fail;
-		}
+        err = regexec(im, line, ARRAY_SIZE(match), match, 0);
+        if (err) {
+            err = regexec(ws, line, ARRAY_SIZE(match), match, 0);
+            if (!err)
+                continue;
+            err = -EINVAL;
+            goto fail;
+        }
 
-		line[match[1].rm_eo] = 0;
-		typename = line + match[1].rm_so;
+        line[match[1].rm_eo] = 0;
+        typename = line + match[1].rm_so;
 
-		line[match[2].rm_eo] = 0;
-		path = line + match[2].rm_so;
+        line[match[2].rm_eo] = 0;
+        path = line + match[2].rm_so;
 
-		if (match[4].rm_so >= 0) {
-			line[match[4].rm_eo] = 0;
-			args = line + match[4].rm_so;
-		}
+        if (match[4].rm_so >= 0) {
+            line[match[4].rm_eo] = 0;
+            args = line + match[4].rm_so;
+        }
 
-		type = tapdisk_disktype_find(typename);
-		if (type < 0) {
-			err = type;
-			goto fail;
-		}
+        type = tapdisk_disktype_find(typename);
+        if (type < 0) {
+            err = type;
+            goto fail;
+        }
 
-		flags = 0;
+        flags = 0;
 
-		if (args) {
-			err = tapdisk_image_parse_flags(args, &flags);
-			if (err)
-				goto fail;
-		}
+        if (args) {
+            err = tapdisk_image_parse_flags(args, &flags);
+            if (err)
+                goto fail;
+        }
 
-		err = tapdisk_image_open(type, path, flags, &image);
-		if (err)
-			goto fail;
+        err = tapdisk_image_open(type, path, flags, &image);
+        if (err)
+            goto fail;
 
-		//list_add_tail(&image->next, &head);
-		TAILQ_INSERT_TAIL(&head, image, entry);
-	} while (1);
+        //list_add_tail(&image->next, &head);
+        TAILQ_INSERT_TAIL(&head, image, entry);
+    } while (1);
 
-	if (!image) {
-		err = -EINVAL;
-		goto fail;
-	}
+    if (!image) {
+        err = -EINVAL;
+        goto fail;
+    }
 
-	err = tapdisk_image_open_parents(image, &head);
-	if (err)
-		goto fail;
+    err = tapdisk_image_open_parents(image, &head);
+    if (err)
+        goto fail;
 
-	//list_splice(&head, _head);
-	TAILQ_CONCAT(&head, _head, entry);
-out:
-	if (im)
-		regfree(im);
-	if (ws)
-		regfree(ws);
-	if (s)
-		fclose(s);
+    //list_splice(&head, _head);
+    TAILQ_CONCAT(&head, _head, entry);
+  out:
+    if (im)
+        regfree(im);
+    if (ws)
+        regfree(ws);
+    if (s)
+        fclose(s);
 
-	return err;
+    return err;
 
-fail:
-	tapdisk_for_each_image_safe(image, next, &head)
-		tapdisk_image_free(image, &head);
+  fail:
+    tapdisk_for_each_image_safe(image, next, &head)
+        tapdisk_image_free(image, &head);
 
-	goto out;
+    goto out;
 }
 
 int
 tapdisk_image_open_chain(const char *desc, int flags, int prt_devnum,
-			 struct tqh_td_image_handle *head)
+                         struct tqh_td_image_handle *head)
 {
-	const char *name;
-	int type, err;
+    const char *name;
+    int type, err;
 
-	type = tapdisk_disktype_parse_params(desc, &name);
-	if (type >= 0)
-		return __tapdisk_image_open_chain(type, name, flags, head, prt_devnum);
+    type = tapdisk_disktype_parse_params(desc, &name);
+    if (type >= 0)
+        return __tapdisk_image_open_chain(type, name, flags, head,
+                                          prt_devnum);
 
-	err = type;
+    err = type;
 
-	if (err == -ENOENT && strlen(desc) >= 3) {
-		switch (desc[2]) {
-		case 'c':
-			if (!strncmp(desc, "x-chain", strlen("x-chain")))
-				err = tapdisk_image_open_x_chain(name, head);
-			break;
-		}
-	}
+    if (err == -ENOENT && strlen(desc) >= 3) {
+        switch (desc[2]) {
+        case 'c':
+            if (!strncmp(desc, "x-chain", strlen("x-chain")))
+                err = tapdisk_image_open_x_chain(name, head);
+            break;
+        }
+    }
 
-	return err;
+    return err;
 }
 
-int
-tapdisk_image_validate_chain(struct tqh_td_image_handle *head)
+int tapdisk_image_validate_chain(struct tqh_td_image_handle *head)
 {
-	td_image_t *image, *parent;
-	int flags, err;
+    td_image_t *image, *parent;
+    int flags, err;
 
-	INFO("VBD CHAIN:\n");
+    INFO("VBD CHAIN:\n");
 
-	tapdisk_for_each_image_reverse(parent, head) {
-		image = TAILQ_PREV(parent, tqh_td_image_handle, entry);
+    tapdisk_for_each_image_reverse(parent, head) {
+        image = TAILQ_PREV(parent, tqh_td_image_handle, entry);
 
-		if (image == TAILQ_FIRST(head))
-			break;
+        if (image == TAILQ_FIRST(head))
+            break;
 
-		err = td_validate_parent(image, parent);
-		if (err)
-			return err;
+        err = td_validate_parent(image, parent);
+        if (err)
+            return err;
 
-		flags = tapdisk_disk_types[image->type]->flags;
-		if (flags & DISK_TYPE_FILTER) {
-			image->driver->info = parent->driver->info;
-			image->info         = parent->info;
-		}
-	}
+        flags = tapdisk_disk_types[image->type]->flags;
+        if (flags & DISK_TYPE_FILTER) {
+            image->driver->info = parent->driver->info;
+            image->info = parent->info;
+        }
+    }
 
-	tapdisk_for_each_image(image, head) {
-		INFO("%s: type:%s(%d) storage:%s(%d)\n",
-		     image->name,
-		     tapdisk_disk_types[image->type]->name,
-		     image->type,
-		     tapdisk_storage_name(image->driver->storage),
-		     image->driver->storage);
-	}
+    tapdisk_for_each_image(image, head) {
+        INFO("%s: type:%s(%d) storage:%s(%d)\n",
+             image->name,
+             tapdisk_disk_types[image->type]->name,
+             image->type,
+             tapdisk_storage_name(image->driver->storage),
+             image->driver->storage);
+    }
 
-	return 0;
+    return 0;
 }
 
-void
-tapdisk_image_stats(td_image_t *image, td_stats_t *st)
+void tapdisk_image_stats(td_image_t * image, td_stats_t * st)
 {
-	tapdisk_stats_enter(st, '{');
-	tapdisk_stats_field(st, "name", "s", image->name);
+    tapdisk_stats_enter(st, '{');
+    tapdisk_stats_field(st, "name", "s", image->name);
 
-	tapdisk_stats_field(st, "hits", "[");
-	tapdisk_stats_val(st, "llu", image->stats.hits.rd);
-	tapdisk_stats_val(st, "llu", image->stats.hits.wr);
-	tapdisk_stats_leave(st, ']');
+    tapdisk_stats_field(st, "hits", "[");
+    tapdisk_stats_val(st, "llu", image->stats.hits.rd);
+    tapdisk_stats_val(st, "llu", image->stats.hits.wr);
+    tapdisk_stats_leave(st, ']');
 
-	tapdisk_stats_field(st, "fail", "[");
-	tapdisk_stats_val(st, "llu", image->stats.fail.rd);
-	tapdisk_stats_val(st, "llu", image->stats.fail.wr);
-	tapdisk_stats_leave(st, ']');
+    tapdisk_stats_field(st, "fail", "[");
+    tapdisk_stats_val(st, "llu", image->stats.fail.rd);
+    tapdisk_stats_val(st, "llu", image->stats.fail.wr);
+    tapdisk_stats_leave(st, ']');
 
-	tapdisk_stats_field(st, "driver", "{");
-	tapdisk_driver_stats(image->driver, st);
-	tapdisk_stats_leave(st, '}');
+    tapdisk_stats_field(st, "driver", "{");
+    tapdisk_driver_stats(image->driver, st);
+    tapdisk_stats_leave(st, '}');
 
-	tapdisk_stats_leave(st, '}');
+    tapdisk_stats_leave(st, '}');
 }

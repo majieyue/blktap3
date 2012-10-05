@@ -35,36 +35,36 @@
 #define TD_STATS_MAX_DEPTH 8
 
 struct tapdisk_stats_ctx {
-	void           *pos;
+    void *pos;
 
-	void           *buf;
-	size_t          size;
+    void *buf;
+    size_t size;
 
-	int             n_elem[TD_STATS_MAX_DEPTH];
-	int             depth;
+    int n_elem[TD_STATS_MAX_DEPTH];
+    int depth;
 };
 
 typedef struct tapdisk_stats_ctx td_stats_t;
 
 static inline void
-tapdisk_stats_init(td_stats_t *st, char *buf, size_t size)
+tapdisk_stats_init(td_stats_t * st, char *buf, size_t size)
 {
-	memset(st, 0, sizeof(*st));
+    memset(st, 0, sizeof(*st));
 
-	st->pos  = buf;
-	st->buf  = buf;
-	st->size = size;
+    st->pos = buf;
+    st->buf = buf;
+    st->size = size;
 }
 
-static inline size_t
-tapdisk_stats_length(td_stats_t *st)
+static inline size_t tapdisk_stats_length(td_stats_t * st)
 {
-	return st->pos - st->buf;
+    return st->pos - st->buf;
 }
 
-void tapdisk_stats_enter(td_stats_t *st, char t);
-void tapdisk_stats_leave(td_stats_t *st, char t);
-void tapdisk_stats_field(td_stats_t *st, const char *key, const char *conv, ...);
-void tapdisk_stats_val(td_stats_t *st, const char *conv, ...);
+void tapdisk_stats_enter(td_stats_t * st, char t);
+void tapdisk_stats_leave(td_stats_t * st, char t);
+void tapdisk_stats_field(td_stats_t * st, const char *key,
+                         const char *conv, ...);
+void tapdisk_stats_val(td_stats_t * st, const char *conv, ...);
 
-#endif /* _TAPDISK_STATS_H_ */
+#endif                          /* _TAPDISK_STATS_H_ */

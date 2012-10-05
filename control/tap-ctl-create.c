@@ -29,34 +29,33 @@
 /* TODO devname not used */
 int
 tap_ctl_create(const char *params, int flags, int parent_minor,
-		char *secondary)
+               char *secondary)
 {
-	int err, id, minor = 0;
+    int err, id, minor = 0;
 
-	id = tap_ctl_spawn();
-	if (id < 0) {
+    id = tap_ctl_spawn();
+    if (id < 0) {
         EPRINTF("error spawning tapdisk: %s", strerror(id));
-		err = id;
-		goto destroy;
-	}
+        err = id;
+        goto destroy;
+    }
 
-	err = tap_ctl_attach(id, minor);
-	if (err) {
+    err = tap_ctl_attach(id, minor);
+    if (err) {
         EPRINTF("error attaching to tapdisk: %s", strerror(err));
-		goto destroy;
+        goto destroy;
     }
 
-	err = tap_ctl_open(id, minor, params, flags, parent_minor, secondary);
-	if (err) {
+    err = tap_ctl_open(id, minor, params, flags, parent_minor, secondary);
+    if (err) {
         EPRINTF("error opening tapdisk: %s", strerror(err));
-		goto detach;
+        goto detach;
     }
 
-	return 0;
+    return 0;
 
-detach:
-	tap_ctl_detach(id, minor);
-destroy:
-	return err;
+  detach:
+    tap_ctl_detach(id, minor);
+  destroy:
+    return err;
 }
-

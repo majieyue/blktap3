@@ -37,48 +37,49 @@ typedef struct td_blktap_req td_blktap_req_t;
 #include "tapdisk-vbd.h"
 
 struct td_blktap_stats {
-	struct {
-		unsigned long long      in;
-		unsigned long long      out;
-	} reqs;
-	struct {
-		unsigned long long      in;
-		unsigned long long      out;
-	} kicks;
+    struct {
+        unsigned long long in;
+        unsigned long long out;
+    } reqs;
+    struct {
+        unsigned long long in;
+        unsigned long long out;
+    } kicks;
 };
 
 struct td_blktap {
-	int                     minor;
-	td_vbd_t               *vbd;
+    int minor;
+    td_vbd_t *vbd;
 
-	int                     fd;
+    int fd;
 
-	void                   *vma;
-	size_t                  vma_size;
+    void *vma;
+    size_t vma_size;
 
-	struct blktap_sring    *sring;
-	unsigned int            req_cons;
-	unsigned int            rsp_prod_pvt;
+    struct blktap_sring *sring;
+    unsigned int req_cons;
+    unsigned int rsp_prod_pvt;
 
-	int                     event_id;
-	void                   *vstart;
+    int event_id;
+    void *vstart;
 
-	int                     n_reqs;
-	td_blktap_req_t        *reqs;
-	int                     n_reqs_free;
-	td_blktap_req_t       **reqs_free;
+    int n_reqs;
+    td_blktap_req_t *reqs;
+    int n_reqs_free;
+    td_blktap_req_t **reqs_free;
 
-	TAILQ_ENTRY(td_blktap)	entry;
+     TAILQ_ENTRY(td_blktap) entry;
 
-	struct td_blktap_stats  stats;
+    struct td_blktap_stats stats;
 };
 
 int tapdisk_blktap_open(const char *, td_vbd_t *, td_blktap_t **);
 void tapdisk_blktap_close(td_blktap_t *);
 
-int tapdisk_blktap_create_device(td_blktap_t *, const td_disk_info_t *, int ro);
+int tapdisk_blktap_create_device(td_blktap_t *, const td_disk_info_t *,
+                                 int ro);
 int tapdisk_blktap_remove_device(td_blktap_t *);
 
 void tapdisk_blktap_stats(td_blktap_t *, td_stats_t *);
 
-#endif /* _TAPDISK_BLKTAP_H_ */
+#endif                          /* _TAPDISK_BLKTAP_H_ */

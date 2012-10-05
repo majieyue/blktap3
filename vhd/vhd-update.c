@@ -52,46 +52,42 @@
 #include "libvhd.h"
 #include "libvhd-journal.h"
 
-static void
-usage(void)
+static void usage(void)
 {
-	printf("usage: vhd-update <-n name> [-j existing journal] [-h]\n");
-	exit(EINVAL);
+    printf("usage: vhd-update <-n name> [-j existing journal] [-h]\n");
+    exit(EINVAL);
 }
 
 /*
  * update vhd creator version to reflect its new bitmap ordering
  */
-static inline int
-update_creator_version(vhd_journal_t *journal)
+static inline int update_creator_version(vhd_journal_t * journal)
 {
-	journal->vhd.footer.crtr_ver = VHD_VERSION(1, 1);
-	return vhd_write_footer(&journal->vhd, &journal->vhd.footer);
+    journal->vhd.footer.crtr_ver = VHD_VERSION(1, 1);
+    return vhd_write_footer(&journal->vhd, &journal->vhd.footer);
 }
 
-static int
-journal_bitmaps(vhd_journal_t *journal)
+static int journal_bitmaps(vhd_journal_t * journal)
 {
-	int i, err;
+    int i, err;
 
-	for (i = 0; i < journal->vhd.bat.entries; i++) {
-		err = vhd_journal_add_block(journal, i, VHD_JOURNAL_METADATA);
-		if (err)
-			return err;
-	}
+    for (i = 0; i < journal->vhd.bat.entries; i++) {
+        err = vhd_journal_add_block(journal, i, VHD_JOURNAL_METADATA);
+        if (err)
+            return err;
+    }
 
-	return 0;
+    return 0;
 }
 
 /*
  * older VHD bitmaps were little endian
  * and bits within a word were set from right to left
  */
-static inline int
-old_test_bit(int nr, volatile void * addr)
+static inline int old_test_bit(int nr, volatile void *addr)
 {
-        return (((unsigned long*)addr)[nr/(sizeof(unsigned long)*8)] >>
-                (nr % (sizeof(unsigned long)*8))) & 1;
+    return (((unsigned long *) addr)[nr / (sizeof(unsigned long) * 8)] >>
+            (nr % (sizeof(unsigned long) * 8))) & 1;
 }
 
 /*
@@ -99,173 +95,168 @@ old_test_bit(int nr, volatile void * addr)
  * and bits within a word are set from left to right
  */
 #define BIT_MASK 0x80
-static inline void
-new_set_bit (int nr, volatile char *addr)
+static inline void new_set_bit(int nr, volatile char *addr)
 {
-        addr[nr >> 3] |= (BIT_MASK >> (nr & 7));
+    addr[nr >> 3] |= (BIT_MASK >> (nr & 7));
 }
 
-static void
-convert_bitmap(char *in, char *out, int bytes)
+static void convert_bitmap(char *in, char *out, int bytes)
 {
-	int i;
+    int i;
 
-	memset(out, 0, bytes);
+    memset(out, 0, bytes);
 
-	for (i = 0; i < bytes << 3; i++)
-		if (old_test_bit(i, (void *)in))
-			new_set_bit(i, out);
+    for (i = 0; i < bytes << 3; i++)
+        if (old_test_bit(i, (void *) in))
+            new_set_bit(i, out);
 }
 
-static int
-update_vhd(vhd_journal_t *journal, int rollback)
+static int update_vhd(vhd_journal_t * journal, int rollback)
 {
-	int i, err;
-	size_t size;
-	char *buf;
-	void *converted;
+    int i, err;
+    size_t size;
+    char *buf;
+    void *converted;
 
-	buf       = NULL;
-	converted = NULL;
+    buf = NULL;
+    converted = NULL;
 
-	size = vhd_bytes_padded(journal->vhd.spb / 8);
-	err  = posix_memalign(&converted, 512, size);
-	if (err) {
-		converted = NULL;
-		goto out;
-	}
+    size = vhd_bytes_padded(journal->vhd.spb / 8);
+    err = posix_memalign(&converted, 512, size);
+    if (err) {
+        converted = NULL;
+        goto out;
+    }
 
-	for (i = 0; i < journal->vhd.bat.entries; i++) {
-		if (journal->vhd.bat.bat[i] == DD_BLK_UNUSED)
-			continue;
+    for (i = 0; i < journal->vhd.bat.entries; i++) {
+        if (journal->vhd.bat.bat[i] == DD_BLK_UNUSED)
+            continue;
 
-		err = vhd_read_bitmap(&journal->vhd, i, &buf);
-		if (err)
-			goto out;
+        err = vhd_read_bitmap(&journal->vhd, i, &buf);
+        if (err)
+            goto out;
 
-		if (rollback)
-			memcpy(converted, buf, size);
-		else
-			convert_bitmap(buf, converted, size);
+        if (rollback)
+            memcpy(converted, buf, size);
+        else
+            convert_bitmap(buf, converted, size);
 
-		free(buf);
+        free(buf);
 
-		err = vhd_write_bitmap(&journal->vhd, i, converted);
-		if (err)
-			goto out;
-	}
+        err = vhd_write_bitmap(&journal->vhd, i, converted);
+        if (err)
+            goto out;
+    }
 
-	err = 0;
- out:
-	free(converted);
-	return err;
+    err = 0;
+  out:
+    free(converted);
+    return err;
 }
 
 static int
-open_journal(vhd_journal_t *journal, const char *file, const char *jfile)
+open_journal(vhd_journal_t * journal, const char *file, const char *jfile)
 {
-	int err;
+    int err;
 
-	err = vhd_journal_create(journal, file, jfile);
-	if (err) {
-		printf("error creating journal for %s: %d\n", file, err);
-		return err;
-	}
+    err = vhd_journal_create(journal, file, jfile);
+    if (err) {
+        printf("error creating journal for %s: %d\n", file, err);
+        return err;
+    }
 
-	return 0;
+    return 0;
 }
 
-static int
-close_journal(vhd_journal_t *journal, int err)
+static int close_journal(vhd_journal_t * journal, int err)
 {
-	if (err)
-		err = vhd_journal_revert(journal);
-	else
-		err = vhd_journal_commit(journal);
+    if (err)
+        err = vhd_journal_revert(journal);
+    else
+        err = vhd_journal_commit(journal);
 
-	if (err)
-		return vhd_journal_close(journal);
-	else
-		return vhd_journal_remove(journal);
+    if (err)
+        return vhd_journal_close(journal);
+    else
+        return vhd_journal_remove(journal);
 }
 
-int
-main(int argc, char **argv)
+int main(int argc, char **argv)
 {
-	char *file, *jfile;
-	int c, err, rollback;
-	vhd_journal_t journal;
+    char *file, *jfile;
+    int c, err, rollback;
+    vhd_journal_t journal;
 
-	file     = NULL;
-	jfile    = NULL;
-	rollback = 0;
+    file = NULL;
+    jfile = NULL;
+    rollback = 0;
 
-	while ((c = getopt(argc, argv, "n:j:rh")) != -1) {
-		switch(c) {
-		case 'n':
-			file = optarg;
-			break;
-		case 'j':
-			jfile = optarg;
-			err = access(jfile, R_OK);
-			if (err == -1) {
-				printf("invalid journal arg %s\n", jfile);
-				return -errno;
-			}
-			break;
-		case 'r':
-			/* add a rollback option for debugging which
-			 * pushes journalled bitmaps to original file
-			 * without transforming them */
-			rollback = 1;
-			break;
-		default:
-			usage();
-		}
-	}
+    while ((c = getopt(argc, argv, "n:j:rh")) != -1) {
+        switch (c) {
+        case 'n':
+            file = optarg;
+            break;
+        case 'j':
+            jfile = optarg;
+            err = access(jfile, R_OK);
+            if (err == -1) {
+                printf("invalid journal arg %s\n", jfile);
+                return -errno;
+            }
+            break;
+        case 'r':
+            /* add a rollback option for debugging which
+             * pushes journalled bitmaps to original file
+             * without transforming them */
+            rollback = 1;
+            break;
+        default:
+            usage();
+        }
+    }
 
-	if (!file)
-		usage();
+    if (!file)
+        usage();
 
-	if (rollback && !jfile) {
-		printf("rollback requires a journal argument\n");
-		usage();
-	}
+    if (rollback && !jfile) {
+        printf("rollback requires a journal argument\n");
+        usage();
+    }
 
-	err = open_journal(&journal, file, jfile);
-	if (err)
-		return err;
+    err = open_journal(&journal, file, jfile);
+    if (err)
+        return err;
 
-	if (!vhd_creator_tapdisk(&journal.vhd) ||
-	    journal.vhd.footer.crtr_ver != VHD_VERSION(0, 1) ||
-	    journal.vhd.footer.type == HD_TYPE_FIXED) {
-		err = 0;
-		goto out;
-	}
+    if (!vhd_creator_tapdisk(&journal.vhd) ||
+        journal.vhd.footer.crtr_ver != VHD_VERSION(0, 1) ||
+        journal.vhd.footer.type == HD_TYPE_FIXED) {
+        err = 0;
+        goto out;
+    }
 
-	err = journal_bitmaps(&journal);
-	if (err) {
-		/* no changes to vhd file yet,
-		 * so close the journal and bail */
-		vhd_journal_close(&journal);
-		return err;
-	}
+    err = journal_bitmaps(&journal);
+    if (err) {
+        /* no changes to vhd file yet,
+         * so close the journal and bail */
+        vhd_journal_close(&journal);
+        return err;
+    }
 
-	err = update_vhd(&journal, rollback);
-	if (err) {
-		printf("update failed: %d; saving journal\n", err);
-		goto out;
-	}
+    err = update_vhd(&journal, rollback);
+    if (err) {
+        printf("update failed: %d; saving journal\n", err);
+        goto out;
+    }
 
-	err = update_creator_version(&journal);
-	if (err) {
-		printf("failed to udpate creator version: %d\n", err);
-		goto out;
-	}
+    err = update_creator_version(&journal);
+    if (err) {
+        printf("failed to udpate creator version: %d\n", err);
+        goto out;
+    }
 
-	err = 0;
+    err = 0;
 
-out:
-	err = close_journal(&journal, err);
-	return err;
+  out:
+    err = close_journal(&journal, err);
+    return err;
 }

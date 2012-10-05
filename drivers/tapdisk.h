@@ -74,7 +74,7 @@
 //#define BLK_NOT_ALLOCATED            (-99)
 #define TD_NO_PARENT                 1
 
-#define MAX_RAMDISK_SIZE             1024000 /*500MB disk limit*/
+#define MAX_RAMDISK_SIZE             1024000    /*500MB disk limit */
 
 #define TD_OP_READ                   0
 #define TD_OP_WRITE                  1
@@ -100,89 +100,89 @@
 #define td_flag_clear(word, flag)    ((word) &= ~(flag))
 #define td_flag_test(word, flag)     ((word) & (flag))
 
-typedef uint16_t                     td_uuid_t;
-typedef uint32_t                     td_flag_t;
-typedef uint64_t                     td_sector_t;
-typedef struct td_disk_id            td_disk_id_t;
-typedef struct td_disk_info          td_disk_info_t;
-typedef struct td_request            td_request_t;
-typedef struct td_driver_handle      td_driver_t;
-typedef struct td_image_handle       td_image_t;
-typedef struct td_sector_count       td_sector_count_t;
-typedef struct td_vbd_request        td_vbd_request_t;
-typedef struct td_vbd_handle         td_vbd_t;
+typedef uint16_t td_uuid_t;
+typedef uint32_t td_flag_t;
+typedef uint64_t td_sector_t;
+typedef struct td_disk_id td_disk_id_t;
+typedef struct td_disk_info td_disk_info_t;
+typedef struct td_request td_request_t;
+typedef struct td_driver_handle td_driver_t;
+typedef struct td_image_handle td_image_t;
+typedef struct td_sector_count td_sector_count_t;
+typedef struct td_vbd_request td_vbd_request_t;
+typedef struct td_vbd_handle td_vbd_t;
 
 /* 
  * Prototype of the callback to activate as requests complete.
  */
-typedef void (*td_callback_t)(td_request_t, int);
-typedef void (*td_vreq_callback_t)(td_vbd_request_t*, int, void*, int);
+typedef void (*td_callback_t) (td_request_t, int);
+typedef void (*td_vreq_callback_t) (td_vbd_request_t *, int, void *, int);
 
 struct td_disk_id {
-	char                        *name;
-	int                          type;
-	int                          flags;
+    char *name;
+    int type;
+    int flags;
 };
 
 struct td_disk_info {
-	td_sector_t                  size;
-        long                         sector_size;
-	uint32_t                     info;
+    td_sector_t size;
+    long sector_size;
+    uint32_t info;
 };
 
 struct td_iovec {
-	void                       *base;
-	unsigned int                secs;
+    void *base;
+    unsigned int secs;
 };
 
 TAILQ_HEAD(tqh_td_vbd_request, td_vbd_request);
 
 struct td_vbd_request {
-	int                         op;
-	td_sector_t                 sec;
-	struct td_iovec            *iov;
-	int                         iovcnt;
+    int op;
+    td_sector_t sec;
+    struct td_iovec *iov;
+    int iovcnt;
 
-	td_vreq_callback_t          cb;
-	void                       *token;
-	const char                 *name;
+    td_vreq_callback_t cb;
+    void *token;
+    const char *name;
 
-	int                         error;
-	int                         prev_error;
+    int error;
+    int prev_error;
 
-	int                         submitting;
-	int                         secs_pending;
-	int                         num_retries;
-	struct timeval				ts;
-	struct timeval              last_try;
+    int submitting;
+    int secs_pending;
+    int num_retries;
+    struct timeval ts;
+    struct timeval last_try;
 
-	td_vbd_t                   *vbd;
+    td_vbd_t *vbd;
 
-	/*
-	 * linked list of struct td_vbd_request
-	 */
-	TAILQ_ENTRY(td_vbd_request)	next;
+    /*
+     * linked list of struct td_vbd_request
+     */
+     TAILQ_ENTRY(td_vbd_request) next;
 
-	/*
-	 * TODO list head of what?
-	 */
-	struct tqh_td_vbd_request	*list_head;
+    /*
+     * TODO list head of what?
+     */
+    struct tqh_td_vbd_request *list_head;
 };
 
 struct td_request {
-	int                          op;
-	void                        *buf;
+    int op;
+    void *buf;
 
-	td_sector_t                  sec;
-	int                          secs;
+    td_sector_t sec;
+    int secs;
 
-	td_image_t                  *image;
+    td_image_t *image;
 
-	td_callback_t                cb;
-	void                        *cb_data;
+    td_callback_t cb;
+    void *cb_data;
 
-	int                          sidx;
-	td_vbd_request_t            *vreq;
+    int sidx;
+    td_vbd_request_t *vreq;
 };
 
 /* 
@@ -190,33 +190,33 @@ struct td_request {
  * See note at the top of this file describing this interface.
  */
 struct tap_disk {
-	const char                  *disk_type;
-	td_flag_t                    flags;
-	int                          private_data_size;
-	int (*td_open)               (td_driver_t *, const char *, td_flag_t);
-	int (*td_close)              (td_driver_t *);
-	int (*td_get_parent_id)      (td_driver_t *, td_disk_id_t *);
-	int (*td_validate_parent)    (td_driver_t *, td_driver_t *, td_flag_t);
-	void (*td_queue_read)        (td_driver_t *, td_request_t);
-	void (*td_queue_write)       (td_driver_t *, td_request_t);
-	void (*td_debug)             (td_driver_t *);
-	void (*td_stats)             (td_driver_t *, td_stats_t *);
+    const char *disk_type;
+    td_flag_t flags;
+    int private_data_size;
+    int (*td_open) (td_driver_t *, const char *, td_flag_t);
+    int (*td_close) (td_driver_t *);
+    int (*td_get_parent_id) (td_driver_t *, td_disk_id_t *);
+    int (*td_validate_parent) (td_driver_t *, td_driver_t *, td_flag_t);
+    void (*td_queue_read) (td_driver_t *, td_request_t);
+    void (*td_queue_write) (td_driver_t *, td_request_t);
+    void (*td_debug) (td_driver_t *);
+    void (*td_stats) (td_driver_t *, td_stats_t *);
 };
 
 struct td_sector_count {
-	td_sector_t rd;
-	td_sector_t wr;
+    td_sector_t rd;
+    td_sector_t wr;
 };
 
 static inline void
-td_sector_count_add(td_sector_count_t *s, td_sector_t v, int write)
+td_sector_count_add(td_sector_count_t * s, td_sector_t v, int write)
 {
-	if (write)
-		s->wr += v;
-	else
-		s->rd += v;
+    if (write)
+        s->wr += v;
+    else
+        s->rd += v;
 }
 
 void td_panic(void);
 
-#endif /* __TAPDISK_H__ */
+#endif                          /* __TAPDISK_H__ */

@@ -40,47 +40,46 @@
 
 #include "libvhd.h"
 
-int
-vhd_util_repair(int argc, char **argv)
+int vhd_util_repair(int argc, char **argv)
 {
-	char *name;
-	int err, c;
-	vhd_context_t vhd;
+    char *name;
+    int err, c;
+    vhd_context_t vhd;
 
-	name = NULL;
+    name = NULL;
 
-	if (!argc || !argv)
-		goto usage;
+    if (!argc || !argv)
+        goto usage;
 
-	optind = 0;
-	while ((c = getopt(argc, argv, "n:h")) != -1) {
-		switch (c) {
-		case 'n':
-			name = optarg;
-			break;
-		case 'h':
-		default:
-			goto usage;
-		}
-	}
+    optind = 0;
+    while ((c = getopt(argc, argv, "n:h")) != -1) {
+        switch (c) {
+        case 'n':
+            name = optarg;
+            break;
+        case 'h':
+        default:
+            goto usage;
+        }
+    }
 
-	if (!name || optind != argc)
-		goto usage;
+    if (!name || optind != argc)
+        goto usage;
 
-	err = vhd_open(&vhd, name, VHD_OPEN_RDWR);
-	if (err) {
-		printf("error opening %s: %d\n", name, err);
-		return err;
-	}
+    err = vhd_open(&vhd, name, VHD_OPEN_RDWR);
+    if (err) {
+        printf("error opening %s: %d\n", name, err);
+        return err;
+    }
 
-	err = vhd_write_footer(&vhd, &vhd.footer);
-	if (err)
-		printf("error writing footer: %d\n", err);
+    err = vhd_write_footer(&vhd, &vhd.footer);
+    if (err)
+        printf("error writing footer: %d\n", err);
 
-	vhd_close(&vhd);
-	return err;
+    vhd_close(&vhd);
+    return err;
 
-usage:
-	printf("options: <-n name> [-h help]\n");
-	return -EINVAL;
+  usage:
+    printf("options: <-n name> [-h help]\n");
+    return -EINVAL;
 }

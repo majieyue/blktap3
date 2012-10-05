@@ -53,16 +53,16 @@
 #include "tapdisk-syslog.h"
 #include "tapdisk-utils.h"
 
-static int tapdisk_syslog_sock_send(td_syslog_t *log,
-				    const void *msg, size_t size);
-static int tapdisk_syslog_sock_connect(td_syslog_t *log);
+static int tapdisk_syslog_sock_send(td_syslog_t * log,
+                                    const void *msg, size_t size);
+static int tapdisk_syslog_sock_connect(td_syslog_t * log);
 
-static void tapdisk_syslog_sock_mask(td_syslog_t *log);
-static void tapdisk_syslog_sock_unmask(td_syslog_t *log);
+static void tapdisk_syslog_sock_mask(td_syslog_t * log);
+static void tapdisk_syslog_sock_unmask(td_syslog_t * log);
 
 static const struct sockaddr_un syslog_addr = {
-	.sun_family = AF_UNIX,
-	.sun_path   = "/dev/log"
+    .sun_family = AF_UNIX,
+    .sun_path = "/dev/log"
 };
 
 #define RING_PTR(_log, _idx)                                            \
@@ -82,212 +82,206 @@ static const struct sockaddr_un syslog_addr = {
  * size. Hence the RING() macros.
  */
 
-static void
-__tapdisk_syslog_ring_init(td_syslog_t *log)
+static void __tapdisk_syslog_ring_init(td_syslog_t * log)
 {
-	log->buf     = NULL;
-	log->bufsz   = 0;
-	log->msg     = NULL;
-	log->ring    = NULL;
-	log->ringsz  = 0;
+    log->buf = NULL;
+    log->bufsz = 0;
+    log->msg = NULL;
+    log->ring = NULL;
+    log->ringsz = 0;
 }
 
-static inline size_t
-page_align(size_t size)
+static inline size_t page_align(size_t size)
 {
-	size_t page_size = sysconf(_SC_PAGE_SIZE);
-	return (size + page_size - 1) & ~(page_size - 1);
+    size_t page_size = sysconf(_SC_PAGE_SIZE);
+    return (size + page_size - 1) & ~(page_size - 1);
 }
 
-static void
-tapdisk_syslog_ring_uninit(td_syslog_t *log)
+static void tapdisk_syslog_ring_uninit(td_syslog_t * log)
 {
-	if (log->buf)
-		munmap(log->buf, log->bufsz);
+    if (log->buf)
+        munmap(log->buf, log->bufsz);
 
-	__tapdisk_syslog_ring_init(log);
+    __tapdisk_syslog_ring_init(log);
 }
 
-static int
-tapdisk_syslog_ring_init(td_syslog_t *log, size_t size)
+static int tapdisk_syslog_ring_init(td_syslog_t * log, size_t size)
 {
-	int prot, flags, err;
+    int prot, flags, err;
 
-	__tapdisk_syslog_ring_init(log);
+    __tapdisk_syslog_ring_init(log);
 
-	log->bufsz = page_align(size);
+    log->bufsz = page_align(size);
 
-	prot  = PROT_READ|PROT_WRITE;
-	flags = MAP_ANONYMOUS|MAP_PRIVATE;
+    prot = PROT_READ | PROT_WRITE;
+    flags = MAP_ANONYMOUS | MAP_PRIVATE;
 
-	log->buf = mmap(NULL, log->bufsz, prot, flags, -1, 0);
-	if (log->buf == MAP_FAILED) {
-		log->buf = NULL;
-		err = -ENOMEM;
-		goto fail;
-	}
+    log->buf = mmap(NULL, log->bufsz, prot, flags, -1, 0);
+    if (log->buf == MAP_FAILED) {
+        log->buf = NULL;
+        err = -ENOMEM;
+        goto fail;
+    }
 
-	err = mlock(log->buf, size);
-	if (err) {
-		err = -errno;
-		goto fail;
-	}
+    err = mlock(log->buf, size);
+    if (err) {
+        err = -errno;
+        goto fail;
+    }
 
-	log->msg    = log->buf;
-	log->ring   = log->buf + TD_SYSLOG_PACKET_MAX;
-	log->ringsz = size     - TD_SYSLOG_PACKET_MAX;
+    log->msg = log->buf;
+    log->ring = log->buf + TD_SYSLOG_PACKET_MAX;
+    log->ringsz = size - TD_SYSLOG_PACKET_MAX;
 
-	return 0;
+    return 0;
 
-fail:
-	tapdisk_syslog_ring_uninit(log);
+  fail:
+    tapdisk_syslog_ring_uninit(log);
 
-	return err;
+    return err;
 }
 
 static int
-tapdisk_syslog_ring_write_str(td_syslog_t *log, const char *msg, size_t len)
+tapdisk_syslog_ring_write_str(td_syslog_t * log, const char *msg,
+                              size_t len)
 {
-	size_t size, prod, i;
+    size_t size, prod, i;
 
-	len  = MIN(len, TD_SYSLOG_PACKET_MAX);
-	size = len + 1;
+    len = MIN(len, TD_SYSLOG_PACKET_MAX);
+    size = len + 1;
 
-	if (size > RING_FREE(log))
-		return -ENOBUFS;
+    if (size > RING_FREE(log))
+        return -ENOBUFS;
 
-	prod = log->prod;
+    prod = log->prod;
 
-	for (i = 0; i < len; ++i) {
-		char c;
+    for (i = 0; i < len; ++i) {
+        char c;
 
-		c = msg[i];
-		if (c == 0)
-			break;
+        c = msg[i];
+        if (c == 0)
+            break;
 
-		*RING_PTR(log, prod) = c;
-		prod++;
-	}
+        *RING_PTR(log, prod) = c;
+        prod++;
+    }
 
-	*RING_PTR(log, prod) = 0;
+    *RING_PTR(log, prod) = 0;
 
-	log->prod = prod + 1;
+    log->prod = prod + 1;
 
-	return 0;
+    return 0;
 }
 
 static ssize_t
-tapdisk_syslog_ring_read_pkt(td_syslog_t *log, char *msg, size_t size)
+tapdisk_syslog_ring_read_pkt(td_syslog_t * log, char *msg, size_t size)
 {
-	size_t cons;
-	ssize_t sz;
+    size_t cons;
+    ssize_t sz;
 
-	size = MIN(size, TD_SYSLOG_PACKET_MAX);
+    size = MIN(size, TD_SYSLOG_PACKET_MAX);
 
-	sz   = 0;
-	cons = log->cons;
+    sz = 0;
+    cons = log->cons;
 
-	while (sz < size) {
-		char c;
+    while (sz < size) {
+        char c;
 
-		if (cons == log->prod)
-			break;
+        if (cons == log->prod)
+            break;
 
-		c = *RING_PTR(log, cons);
-		msg[sz++] = c;
-		cons++;
+        c = *RING_PTR(log, cons);
+        msg[sz++] = c;
+        cons++;
 
-		if (c == 0)
-			break;
-	}
+        if (c == 0)
+            break;
+    }
 
-	return sz - 1;
+    return sz - 1;
 }
 
-static int
-tapdisk_syslog_ring_dispatch_one(td_syslog_t *log)
+static int tapdisk_syslog_ring_dispatch_one(td_syslog_t * log)
 {
-	size_t len;
-	int err;
+    size_t len;
+    int err;
 
-	len = tapdisk_syslog_ring_read_pkt(log, log->msg,
-					   TD_SYSLOG_PACKET_MAX);
-	if (len == -1)
-		return -ENOMSG;
+    len = tapdisk_syslog_ring_read_pkt(log, log->msg,
+                                       TD_SYSLOG_PACKET_MAX);
+    if (len == -1)
+        return -ENOMSG;
 
-	err = tapdisk_syslog_sock_send(log, log->msg, len);
+    err = tapdisk_syslog_sock_send(log, log->msg, len);
 
-	if (err == -EAGAIN)
-		return err;
+    if (err == -EAGAIN)
+        return err;
 
-	if (err)
-		goto fail;
+    if (err)
+        goto fail;
 
-done:
-	log->cons += len + 1;
-	return 0;
+  done:
+    log->cons += len + 1;
+    return 0;
 
-fail:
-	log->stats.fails++;
-	goto done;
+  fail:
+    log->stats.fails++;
+    goto done;
 }
 
-static void
-tapdisk_syslog_ring_warning(td_syslog_t *log)
+static void tapdisk_syslog_ring_warning(td_syslog_t * log)
 {
-	int n, err;
+    int n, err;
 
-	n        = log->oom;
-	log->oom = 0;
+    n = log->oom;
+    log->oom = 0;
 
-	err = tapdisk_syslog(log, LOG_WARNING,
-			     "tapdisk-syslog: %d messages dropped", n);
-	if (err)
-		log->oom = n;
+    err = tapdisk_syslog(log, LOG_WARNING,
+                         "tapdisk-syslog: %d messages dropped", n);
+    if (err)
+        log->oom = n;
 }
 
-static void
-tapdisk_syslog_ring_dispatch(td_syslog_t *log)
+static void tapdisk_syslog_ring_dispatch(td_syslog_t * log)
 {
-	int err;
+    int err;
 
-	do {
-		err = tapdisk_syslog_ring_dispatch_one(log);
-	} while (!err);
+    do {
+        err = tapdisk_syslog_ring_dispatch_one(log);
+    } while (!err);
 
-	if (log->oom)
-		tapdisk_syslog_ring_warning(log);
+    if (log->oom)
+        tapdisk_syslog_ring_warning(log);
 }
 
 static int
 tapdisk_syslog_vsprintf(char *buf, size_t size,
-			int prio, const struct timeval *tv, const char *ident,
-			const char *fmt, va_list ap)
+                        int prio, const struct timeval *tv,
+                        const char *ident, const char *fmt, va_list ap)
 {
-	char tsbuf[TD_SYSLOG_STRTIME_LEN+1];
-	size_t len;
+    char tsbuf[TD_SYSLOG_STRTIME_LEN + 1];
+    size_t len;
 
-	/*
-	 * PKT       := PRI HEADER MSG
-	 * PRI       := "<" {"0" .. "9"} ">"
-	 * HEADER    := TIMESTAMP HOSTNAME
-	 * MSG       := <TAG> <SEP> <CONTENT>
-	 * SEP       := ":" | " " | "["
-	 */
+    /*
+     * PKT       := PRI HEADER MSG
+     * PRI       := "<" {"0" .. "9"} ">"
+     * HEADER    := TIMESTAMP HOSTNAME
+     * MSG       := <TAG> <SEP> <CONTENT>
+     * SEP       := ":" | " " | "["
+     */
 
-	tapdisk_syslog_strftime(tsbuf, sizeof(tsbuf), tv);
+    tapdisk_syslog_strftime(tsbuf, sizeof(tsbuf), tv);
 
-	len = 0;
+    len = 0;
 
-	/* NB. meant to work with c99 null buffers */
+    /* NB. meant to work with c99 null buffers */
 
-	len += snprintf(buf ? buf + len : NULL, buf ? size - len : 0,
-			"<%d>%s %s: ", prio, tsbuf, ident);
+    len += snprintf(buf ? buf + len : NULL, buf ? size - len : 0,
+                    "<%d>%s %s: ", prio, tsbuf, ident);
 
-	len += vsnprintf(buf ? buf + len : NULL, buf ? size - len : 0,
-			 fmt, ap);
+    len += vsnprintf(buf ? buf + len : NULL, buf ? size - len : 0,
+                     fmt, ap);
 
-	return MIN(len, size);
+    return MIN(len, size);
 }
 
 /*
@@ -318,248 +312,236 @@ tapdisk_syslog_vsprintf(char *buf, size_t size,
  */
 
 int
-tapdisk_vsyslog(td_syslog_t *log, int prio, const char *fmt, va_list ap)
+tapdisk_vsyslog(td_syslog_t * log, int prio, const char *fmt, va_list ap)
 {
-	struct timeval now;
-	size_t len;
-	int err;
+    struct timeval now;
+    size_t len;
+    int err;
 
-	gettimeofday(&now, NULL);
+    gettimeofday(&now, NULL);
 
-	len = tapdisk_syslog_vsprintf(log->msg, TD_SYSLOG_PACKET_MAX,
-				      prio | log->facility,
-				      &now, log->ident, fmt, ap);
+    len = tapdisk_syslog_vsprintf(log->msg, TD_SYSLOG_PACKET_MAX,
+                                  prio | log->facility,
+                                  &now, log->ident, fmt, ap);
 
-	log->stats.count += 1;
-	log->stats.bytes += len;
+    log->stats.count += 1;
+    log->stats.bytes += len;
 
-	if (log->cons != log->prod)
-		goto busy;
+    if (log->cons != log->prod)
+        goto busy;
 
-send:
-	err = tapdisk_syslog_sock_send(log, log->msg, len);
-	if (!err)
-		return 0;
+  send:
+    err = tapdisk_syslog_sock_send(log, log->msg, len);
+    if (!err)
+        return 0;
 
-	if (err == -ENOTCONN) {
-		err = tapdisk_syslog_sock_connect(log);
-		if (!err)
-			goto send;
-	}
+    if (err == -ENOTCONN) {
+        err = tapdisk_syslog_sock_connect(log);
+        if (!err)
+            goto send;
+    }
 
-	if (err != -EAGAIN)
-		goto fail;
+    if (err != -EAGAIN)
+        goto fail;
 
-	tapdisk_syslog_sock_unmask(log);
+    tapdisk_syslog_sock_unmask(log);
 
-busy:
-	if (log->oom) {
-		err = -ENOBUFS;
-		goto oom;
-	}
+  busy:
+    if (log->oom) {
+        err = -ENOBUFS;
+        goto oom;
+    }
 
-	err = tapdisk_syslog_ring_write_str(log, log->msg, len);
-	if (!err)
-		return 0;
+    err = tapdisk_syslog_ring_write_str(log, log->msg, len);
+    if (!err)
+        return 0;
 
-	log->oom_tv = now;
+    log->oom_tv = now;
 
-oom:
-	log->oom++;
-	log->stats.drops++;
-	return err;
+  oom:
+    log->oom++;
+    log->stats.drops++;
+    return err;
 
-fail:
-	log->stats.fails++;
-	return err;
+  fail:
+    log->stats.fails++;
+    return err;
 }
 
-int
-tapdisk_syslog(td_syslog_t *log, int prio, const char *fmt, ...)
+int tapdisk_syslog(td_syslog_t * log, int prio, const char *fmt, ...)
 {
-	va_list ap;
-	int err;
+    va_list ap;
+    int err;
 
-	va_start(ap, fmt);
-	err = tapdisk_vsyslog(log, prio, fmt, ap);
-	va_end(ap);
+    va_start(ap, fmt);
+    err = tapdisk_vsyslog(log, prio, fmt, ap);
+    va_end(ap);
 
-	return err;
+    return err;
 }
 
 static int
-tapdisk_syslog_sock_send(td_syslog_t *log, const void *msg, size_t size)
+tapdisk_syslog_sock_send(td_syslog_t * log, const void *msg, size_t size)
 {
-	ssize_t n;
+    ssize_t n;
 
-	log->stats.xmits++;
+    log->stats.xmits++;
 
-	n = send(log->sock, msg, size, MSG_DONTWAIT);
-	if (n < 0)
-		return -errno;
+    n = send(log->sock, msg, size, MSG_DONTWAIT);
+    if (n < 0)
+        return -errno;
 
-	return 0;
+    return 0;
 }
 
 static void
 tapdisk_syslog_sock_event(event_id_t id, char mode, void *private)
 {
-	td_syslog_t *log = private;
+    td_syslog_t *log = private;
 
-	tapdisk_syslog_ring_dispatch(log);
+    tapdisk_syslog_ring_dispatch(log);
 
-	if (log->cons == log->prod)
-		tapdisk_syslog_sock_mask(log);
+    if (log->cons == log->prod)
+        tapdisk_syslog_sock_mask(log);
 }
 
-static void
-__tapdisk_syslog_sock_init(td_syslog_t *log)
+static void __tapdisk_syslog_sock_init(td_syslog_t * log)
 {
-	log->sock     = -1;
-	log->event_id = -1;
+    log->sock = -1;
+    log->event_id = -1;
 }
 
-static void
-tapdisk_syslog_sock_close(td_syslog_t *log)
+static void tapdisk_syslog_sock_close(td_syslog_t * log)
 {
-	if (log->sock >= 0)
-		close(log->sock);
+    if (log->sock >= 0)
+        close(log->sock);
 
-	if (log->event_id >= 0)
-		tapdisk_server_unregister_event(log->event_id);
+    if (log->event_id >= 0)
+        tapdisk_server_unregister_event(log->event_id);
 
-	__tapdisk_syslog_sock_init(log);
+    __tapdisk_syslog_sock_init(log);
 }
 
-static int
-tapdisk_syslog_sock_open(td_syslog_t *log)
+static int tapdisk_syslog_sock_open(td_syslog_t * log)
 {
-	event_id_t id;
-	int s, err;
+    event_id_t id;
+    int s, err;
 
-	__tapdisk_syslog_sock_init(log);
+    __tapdisk_syslog_sock_init(log);
 
-	s = socket(PF_UNIX, SOCK_DGRAM, 0);
-	if (s < 0) {
-		err = -errno;
-		goto fail;
-	}
+    s = socket(PF_UNIX, SOCK_DGRAM, 0);
+    if (s < 0) {
+        err = -errno;
+        goto fail;
+    }
 
-	log->sock = s;
+    log->sock = s;
 
 #if 0
-	err = fcntl(s, F_SETFL, O_NONBLOCK);
-	if (err < 0) {
-		err = -errno;
-		goto fail;
-	}
+    err = fcntl(s, F_SETFL, O_NONBLOCK);
+    if (err < 0) {
+        err = -errno;
+        goto fail;
+    }
 #endif
 
-	id = tapdisk_server_register_event(SCHEDULER_POLL_WRITE_FD,
-					   s, 0,
-					   tapdisk_syslog_sock_event,
-					   log);
-	if (id < 0) {
-		err = id;
-		goto fail;
-	}
+    id = tapdisk_server_register_event(SCHEDULER_POLL_WRITE_FD,
+                                       s, 0,
+                                       tapdisk_syslog_sock_event, log);
+    if (id < 0) {
+        err = id;
+        goto fail;
+    }
 
-	log->event_id = id;
+    log->event_id = id;
 
-	tapdisk_syslog_sock_mask(log);
+    tapdisk_syslog_sock_mask(log);
 
-	return 0;
+    return 0;
 
-fail:
-	tapdisk_syslog_sock_close(log);
-	return err;
+  fail:
+    tapdisk_syslog_sock_close(log);
+    return err;
 }
 
-static int
-tapdisk_syslog_sock_connect(td_syslog_t *log)
+static int tapdisk_syslog_sock_connect(td_syslog_t * log)
 {
-	int err;
+    int err;
 
-	err = connect(log->sock, &syslog_addr, sizeof(syslog_addr));
-	if (err < 0)
-		err = -errno;
+    err = connect(log->sock, &syslog_addr, sizeof(syslog_addr));
+    if (err < 0)
+        err = -errno;
 
-	return err;
+    return err;
 }
 
-static void
-tapdisk_syslog_sock_mask(td_syslog_t *log)
+static void tapdisk_syslog_sock_mask(td_syslog_t * log)
 {
-	tapdisk_server_mask_event(log->event_id, 1);
+    tapdisk_server_mask_event(log->event_id, 1);
 }
 
-static void
-tapdisk_syslog_sock_unmask(td_syslog_t *log)
+static void tapdisk_syslog_sock_unmask(td_syslog_t * log)
 {
-	tapdisk_server_mask_event(log->event_id, 0);
+    tapdisk_server_mask_event(log->event_id, 0);
 }
 
-void
-__tapdisk_syslog_init(td_syslog_t *log)
+void __tapdisk_syslog_init(td_syslog_t * log)
 {
-	memset(log, 0, sizeof(td_syslog_t));
-	__tapdisk_syslog_sock_init(log);
-	__tapdisk_syslog_ring_init(log);
+    memset(log, 0, sizeof(td_syslog_t));
+    __tapdisk_syslog_sock_init(log);
+    __tapdisk_syslog_ring_init(log);
 }
 
-void
-tapdisk_syslog_close(td_syslog_t *log)
+void tapdisk_syslog_close(td_syslog_t * log)
 {
-	tapdisk_syslog_ring_uninit(log);
-	tapdisk_syslog_sock_close(log);
+    tapdisk_syslog_ring_uninit(log);
+    tapdisk_syslog_sock_close(log);
 
-	if (log->ident)
-		free(log->ident);
+    if (log->ident)
+        free(log->ident);
 
-	__tapdisk_syslog_init(log);
+    __tapdisk_syslog_init(log);
 }
 
 int
-tapdisk_syslog_open(td_syslog_t *log, const char *ident, int facility, size_t bufsz)
+tapdisk_syslog_open(td_syslog_t * log, const char *ident, int facility,
+                    size_t bufsz)
 {
-	int err;
+    int err;
 
-	__tapdisk_syslog_init(log);
+    __tapdisk_syslog_init(log);
 
-	log->facility = facility;
-	log->ident = ident ? strndup(ident, TD_SYSLOG_IDENT_MAX) : NULL;
+    log->facility = facility;
+    log->ident = ident ? strndup(ident, TD_SYSLOG_IDENT_MAX) : NULL;
 
-	err = tapdisk_syslog_sock_open(log);
-	if (err)
-		goto fail;
+    err = tapdisk_syslog_sock_open(log);
+    if (err)
+        goto fail;
 
-	err = tapdisk_syslog_ring_init(log, bufsz);
-	if (err)
-		goto fail;
+    err = tapdisk_syslog_ring_init(log, bufsz);
+    if (err)
+        goto fail;
 
-	return 0;
+    return 0;
 
-fail:
-	tapdisk_syslog_close(log);
+  fail:
+    tapdisk_syslog_close(log);
 
-	return err;
+    return err;
 }
 
-void
-tapdisk_syslog_stats(td_syslog_t *log, int prio)
+void tapdisk_syslog_stats(td_syslog_t * log, int prio)
 {
-	struct _td_syslog_stats *s = &log->stats;
+    struct _td_syslog_stats *s = &log->stats;
 
-	tapdisk_syslog(log, prio,
-		       "tapdisk-syslog: %llu messages, %llu bytes, "
-		       "xmits: %llu, failed: %llu, dropped: %llu",
-		       s->count, s->bytes,
-		       s->xmits, s->fails, s->drops);
+    tapdisk_syslog(log, prio,
+                   "tapdisk-syslog: %llu messages, %llu bytes, "
+                   "xmits: %llu, failed: %llu, dropped: %llu",
+                   s->count, s->bytes, s->xmits, s->fails, s->drops);
 }
 
-void
-tapdisk_syslog_flush(td_syslog_t *log)
+void tapdisk_syslog_flush(td_syslog_t * log)
 {
-	while (log->cons != log->prod)
-		tapdisk_server_iterate();
+    while (log->cons != log->prod)
+        tapdisk_server_iterate();
 }

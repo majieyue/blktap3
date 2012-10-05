@@ -33,37 +33,37 @@
 TAILQ_HEAD(tqh_td_image_handle, td_image_handle);
 
 struct td_image_handle {
-	int                          type;
-	char                        *name;
+    int type;
+    char *name;
 
-	td_flag_t                    flags;
+    td_flag_t flags;
 
-	td_driver_t                 *driver;
-	td_disk_info_t               info;
+    td_driver_t *driver;
+    td_disk_info_t info;
 
-	/*
-	 * for linked lists
-	 */
-	TAILQ_ENTRY(td_image_handle) entry;
+    /*
+     * for linked lists
+     */
+     TAILQ_ENTRY(td_image_handle) entry;
 
-	/*
-	 * Basic datapath statistics, in sectors read/written.
-	 *
-	 * hits:  requests completed by this image.
-	 * fail:  requests completed with failure by this image.
-	 *
-	 * Not that we do not count e.g.
-	 * miss:  requests forwarded.
-	 * total: requests processed by this image.
-	 *
-	 * This is because we'd have to compensate for restarts due to
-	 * -EBUSY conditions. Those can be extrapolated by following
-	 * the chain instead: sum(image[i].hits, i=0..) == vbd.secs;
-	 */
-	struct {
-		td_sector_count_t    hits;
-		td_sector_count_t    fail;
-	} stats;
+    /*
+     * Basic datapath statistics, in sectors read/written.
+     *
+     * hits:  requests completed by this image.
+     * fail:  requests completed with failure by this image.
+     *
+     * Not that we do not count e.g.
+     * miss:  requests forwarded.
+     * total: requests processed by this image.
+     *
+     * This is because we'd have to compensate for restarts due to
+     * -EBUSY conditions. Those can be extrapolated by following
+     * the chain instead: sum(image[i].hits, i=0..) == vbd.secs;
+     */
+    struct {
+        td_sector_count_t hits;
+        td_sector_count_t fail;
+    } stats;
 };
 
 #define tapdisk_for_each_image(_image, _head)			\
@@ -88,7 +88,7 @@ struct td_image_handle {
  * @returns 0 on success
  */
 int tapdisk_image_open(const int type, const char *name, const int flags,
-		td_image_t **_image);
+                       td_image_t ** _image);
 
 void tapdisk_image_close(td_image_t *, struct tqh_td_image_handle *);
 
@@ -96,7 +96,7 @@ void tapdisk_image_close(td_image_t *, struct tqh_td_image_handle *);
  * Opens the image chain.
  */
 int tapdisk_image_open_chain(const char *desc, int flags, int prt_devnum,
-		struct tqh_td_image_handle *head);
+                             struct tqh_td_image_handle *head);
 
 /**
  * Closes all the images.

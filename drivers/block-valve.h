@@ -34,8 +34,8 @@
 #define TD_RLB_REQUEST_MAX        (8 << 20)
 
 struct td_valve_req {
-	unsigned long need;
-	unsigned long done;
+    unsigned long need;
+    unsigned long done;
 };
 
-#endif /* _TAPDISK_VALVE_H_ */
+#endif                          /* _TAPDISK_VALVE_H_ */

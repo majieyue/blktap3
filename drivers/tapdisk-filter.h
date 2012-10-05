@@ -9,31 +9,31 @@
 #include <inttypes.h>
 #include <time.h>
 
-#define TD_INJECT_FAULTS     0x00001  /* simulate random IO failures */
-#define TD_CHECK_INTEGRITY   0x00002  /* check data integrity */
+#define TD_INJECT_FAULTS     0x00001    /* simulate random IO failures */
+#define TD_CHECK_INTEGRITY   0x00002    /* check data integrity */
 
 #define TD_FAULT_RATE        5
 
 struct dhash {
-	uint64_t             hash;
-	struct timeval       time;
+    uint64_t hash;
+    struct timeval time;
 };
 
 struct fiocb {
-	size_t               bytes;
-	void                *data;
+    size_t bytes;
+    void *data;
 };
 
 struct tfilter {
-	int                  mode;
-	uint64_t             secs;
-	int                  iocbs;
+    int mode;
+    uint64_t secs;
+    int iocbs;
 
-	struct dhash        *dhash;
+    struct dhash *dhash;
 
-	int                  ffree;
-	struct fiocb        *fiocbs;
-	struct fiocb       **flist;
+    int ffree;
+    struct fiocb *fiocbs;
+    struct fiocb **flist;
 };
 
 struct tfilter *tapdisk_init_tfilter(int mode, int iocbs, uint64_t secs);

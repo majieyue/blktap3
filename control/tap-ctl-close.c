@@ -27,30 +27,30 @@
 
 int
 tap_ctl_close(const int id, const int minor, const int force,
-	      struct timeval *timeout)
+              struct timeval *timeout)
 {
-	int err;
-	tapdisk_message_t message;
+    int err;
+    tapdisk_message_t message;
 
-	memset(&message, 0, sizeof(message));
-	message.type = TAPDISK_MESSAGE_CLOSE;
-	if (force)
-		message.type = TAPDISK_MESSAGE_FORCE_SHUTDOWN;
-	message.cookie = minor;
+    memset(&message, 0, sizeof(message));
+    message.type = TAPDISK_MESSAGE_CLOSE;
+    if (force)
+        message.type = TAPDISK_MESSAGE_FORCE_SHUTDOWN;
+    message.cookie = minor;
 
-	err = tap_ctl_connect_send_and_receive(id, &message, timeout);
-	if (err)
-		return err;
+    err = tap_ctl_connect_send_and_receive(id, &message, timeout);
+    if (err)
+        return err;
 
-	if (message.type == TAPDISK_MESSAGE_CLOSE_RSP) {
-		err = message.u.response.error;
-		if (err)
-			EPRINTF("close failed: %d\n", err);
-	} else {
-		EPRINTF("got unexpected result '%s' from %d\n",
-			tapdisk_message_name(message.type), id);
-		err = EINVAL;
-	}
+    if (message.type == TAPDISK_MESSAGE_CLOSE_RSP) {
+        err = message.u.response.error;
+        if (err)
+            EPRINTF("close failed: %d\n", err);
+    } else {
+        EPRINTF("got unexpected result '%s' from %d\n",
+                tapdisk_message_name(message.type), id);
+        err = EINVAL;
+    }
 
-	return err;
+    return err;
 }

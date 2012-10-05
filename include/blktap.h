@@ -36,7 +36,7 @@
 	((_type*)((void*)(_ptr) - offsetof(_type, _memb)))
 
 /* FIXME */
-#define __printf(a, b) __attribute__((format(printf, a, b))) 
+#define __printf(a, b) __attribute__((format(printf, a, b)))
 
 #define TAILQ_MOVE_HEAD(node, src, dst, entry)	\
 	TAILQ_REMOVE(src, node, entry);				\
@@ -48,5 +48,4 @@
 
 #define ARRAY_SIZE(_a)   (sizeof(_a)/sizeof((_a)[0]))
 
-#endif /* __BLKTAP_3_H__ */
-
+#endif                          /* __BLKTAP_3_H__ */

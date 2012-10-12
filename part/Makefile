@@ -7,14 +7,14 @@ IBIN = part-util
 
 override CFLAGS += \
 	-I$(BLKTAP_ROOT)/include \
-	-I$(XEN_ROOT)/tools/include
+	$(CFLAGS_xeninclude)	
 
 PART-OBJS := partition.o
 
 all: $(IBIN) vhdpartx
 
 $(IBIN): $(PART-OBJS) part-util.o
-	$(CC) -o $@ $^
+	$(CC) -o $@ $^ $(LDFLAGS)
 
 install: all
 	$(INSTALL_DIR) -p $(DESTDIR)$(SBINDIR)

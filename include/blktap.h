@@ -48,6 +48,12 @@
 	TAILQ_REMOVE(src, node, entry);				\
 	TAILQ_INSERT_TAIL(dst, node, entry);
 
-#define ARRAY_SIZE(_a)   (sizeof(_a)/sizeof((_a)[0]))
+/*
+ * TODO This is defined in xen/lib.h, use that instead of redefining it
+ * here.
+ */
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+#endif /* ARRAY_SIZE */
 
 #endif                          /* __BLKTAP_3_H__ */

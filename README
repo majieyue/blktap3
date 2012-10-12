@@ -39,7 +39,7 @@ examined how the structures of this file are used.
 - Obsolete files: Most of the files implementing blktap/blkback-specific
 functionality have been removed, though some of them may have been missed. A
 thorough examination of all files should be done.
-- Unused stuff: variables, #define's, #include's, fucntions, structs and struct members, etc: there are probably many of these. Lots of them have been removed tough there may still be more lurking around.
+- Unused stuff: variables, #define's, #include's, functions, structs and struct members, etc: there are probably many of these. Lots of them have been removed tough there may still be more lurking around.
 - Merge-able structs and functions: there are a few struct that only exist
 within a struct, they should be merged into the parent struct to improve code
 clarity.  Similarly, there are functions only called by one function; this make

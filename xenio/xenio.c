@@ -484,6 +484,7 @@ static int xenio_device_check_frontend_state(xenio_device_t * device)
     }
 
     err = backend.ops->frontend_changed(device, state);
+	DBG("change from state %d: %d\n", state, err);
 
   fail:
     free(s);
@@ -527,7 +528,7 @@ static void xenio_backend_remove_device(xenio_device_t * device)
 }
 
 /**
- * Creates a device and adds it to the list of devices in the backend.
+ * Creates a device and adds it to the list of devices.
  * Initiates a xenstore watch to the blkfront state.
  *
  * Creating the device implies initializing the handle and retrieving all the
@@ -547,6 +548,9 @@ static inline int xenio_backend_create_device(int domid, const char *name)
         goto fail;
     }
 
+	/*
+	 * TODO replace with alloc_serial() and check for overflow
+	 */
     device->serial = backend.serial++;
     device->domid = domid;
 
@@ -591,6 +595,10 @@ static inline int xenio_backend_create_device(int domid, const char *name)
     if (err)
         goto fail;
 
+	/*
+	 * Finally, watch the frontend path in XenStore for changes. Once the
+	 * frontend state has changed, we can continue. TODO
+	 */
     err = xenio_device_watch_frontend_state(device);
     if (err)
         goto fail;
@@ -657,29 +665,29 @@ do {															\
 } while (0)
 
 /**
- * Creates or removes a device.
+ * Creates (removes) a device depending on the existence (non-existence) of the
+ * "backend/xenio/@domid/@devname" XenStore path.
  *
- * TODO Documents under which conditions the device gets created/removed.
  * TODO Find out what that xenio-serial thing does.
  */
-static int xenio_backend_probe_device(int domid, const char *name)
+static int xenio_backend_probe_device(int domid, const char *devname)
 {
     bool exists, create, remove;
     xenio_device_t *device;
     int err;
 
-    DBG("probe device domid=%d name=%s\n", domid, name);
+    DBG("probe device domid=%d name=%s\n", domid, devname);
 
     /*
      * Ask xenstore if the device _should_ exist.
      */
-    exists = xenio_backend_device_exists(domid, name);
+    exists = xenio_backend_device_exists(domid, devname);
 
     /*
-     * Search the device list in the backend for this specific device.
+     * Search the device list for this specific device.
      */
     xenio_backend_find_device(device,
-			device->domid == domid && !strcmp(device->name, name));
+			device->domid == domid && !strcmp(device->name, devname));
 
     /*
 	 * If xenstore says that the device exists but it's not in our device list,
@@ -698,18 +706,23 @@ static int xenio_backend_probe_device(int domid, const char *name)
          * check the device serial, to sync with fast
          * remove/re-create cycles.
          */
-        remove = create = ! !xenio_device_check_serial(device);
+        remove = create = !!xenio_device_check_serial(device);
 
         if (!create && !remove) {
             DBG("neither create nor remove\n");
         }
     }
 
+	/*
+	 * TODO is this possible?
+	 */
+	assert(!(create && remove));
+
     if (remove)
         xenio_backend_remove_device(device);
 
     if (create) {
-        err = xenio_backend_create_device(domid, name);
+        err = xenio_backend_create_device(domid, devname);
         if (err)
             goto fail;
     }
@@ -720,7 +733,7 @@ static int xenio_backend_probe_device(int domid, const char *name)
 }
 
 /**
- * XXX ???
+ * TODO Only called by xenio_backend_handle_backend_watch.
  */
 static inline int xenio_backend_scan(void)
 {
@@ -801,6 +814,13 @@ static inline int xenio_backend_handle_otherend_watch(char *path)
 }
 
 /**
+ * Examine the change in the backend XenStore path.
+ *
+ * If the path is "/backend" or "/backend/xenio", all devices are probed.
+ * Otherwise, the path should be "backend/xenio/<domid>/<device name>"
+ * (i.e. backend/xenio/1/51712), and in this case this specific device is
+ * probed.
+ *
  * TODO Only called by xenio_backend_read_watch.
  */
 static inline int xenio_backend_handle_backend_watch(char *path)
@@ -808,46 +828,43 @@ static inline int xenio_backend_handle_backend_watch(char *path)
     char *s, *end, *name;
     int domid;
 
-    /* the path should be in the format backend/<name>/<domid>/<device name>,
-     * i.e. backend/xenio/1/51712 */
-
-    /* ignore the backend/xenio part */
+    /*
+	 * ignore the backend/xenio part
+	 */
     s = strtok(path, "/");
     assert(!strcmp(s, "backend"));
-
     s = strtok(NULL, "/");
     if (!s)
-        goto scan;
+        return xenio_backend_scan();
 
     assert(!strcmp(s, XENIO_BACKEND_NAME));
-
     s = strtok(NULL, "/");
     if (!s)
-        goto scan;
+        return xenio_backend_scan();
 
-    /* get the domain ID */
+    /*
+	 * get the domain ID
+	 */
     domid = strtoul(s, &end, 0);
     if (*end != 0 || end == s)
         return -EINVAL;
 
-    /* get the device name */
+    /*
+	 * get the device name
+	 */
     name = strtok(NULL, "/");
     if (!name)
-        goto scan;
-
-    /*
-     * Create or remove the device.
-     *
-     * TODO Or check it's serial.
-     */
-    return xenio_backend_probe_device(domid, name);
-
-  scan:
-    return xenio_backend_scan();
+        return xenio_backend_scan();
+	else
+		/*
+		 * Create or remove the device, TODO or check it's serial.
+		 */
+		return xenio_backend_probe_device(domid, name);
 }
 
 /**
- * TODO watch backend/xenio
+ * TODO Read changes that occurred on the backend/xenio XenStore path and act.
+ * Either the backend path or the frontend path will have changed.
  */
 static inline void xenio_backend_read_watch(void)
 {
@@ -871,14 +888,12 @@ static inline void xenio_backend_read_watch(void)
     }
 
     /*
-     * The initial path is backend/xenio.
+     * Token is either "otherend-state", indicating a change in the frontend,
+	 * or "backend-xenio", indicating a change in the backend.
      */
     switch (token[0]) {
 
     case 'o':
-        /*
-         * TODO Is this blkfront?
-         */
         if (!strcmp(token, "otherend-state")) {
             err = xenio_backend_handle_otherend_watch(path);
             break;
@@ -886,7 +901,7 @@ static inline void xenio_backend_read_watch(void)
         /* TODO gracefully fail? */
         BUG();
 
-    case 'b': /* token is backend-xenio */
+    case 'b':
         /*
          * TODO verify the following:
          *
@@ -930,15 +945,6 @@ static inline void xenio_backend_read_watch(void)
     if (watch)
         free(watch);
     return;
-}
-
-/**
- * Retrieves the file descriptor of the xenstore watch. This fd can be polled
- * to detect changes on the watched xenstore path.
- */
-int xenio_backend_fd(void)
-{
-    return xs_fileno(backend.xs);
 }
 
 static void xenio_backend_destroy(void)
@@ -1001,6 +1007,7 @@ static inline int xenio_backend_create(const struct xenio_backend_ops *ops,
  * Retrieves the tapdisk designated to serve this device.
  *
  * TODO Which information does it exactly return?
+ * TODO Only called by blkback_probe, merge into it?
  */
 static inline int blkback_find_tapdisk(blkback_device_t * bdev)
 {
@@ -1033,7 +1040,10 @@ static inline int blkback_find_tapdisk(blkback_device_t * bdev)
     return 0;
 }
 
-static int blkback_read_otherend_proto(xenio_device_t * xbdev)
+/**
+ * TODO Only called by blkback_connect_tap, merge into it?
+ */
+static inline int blkback_read_otherend_proto(xenio_device_t * xbdev)
 {
     char *s;
 
@@ -1054,7 +1064,13 @@ static int blkback_read_otherend_proto(xenio_device_t * xbdev)
     return -EINVAL;
 }
 
-int blkback_connect_tap(xenio_device_t * xbdev)
+/**
+ * Core functions that instructs the tapdisk to connect to the ring.
+ * TODO elaborate more
+ *
+ * TODO Only called by blkback_frontend_changed.
+ */
+static inline int blkback_connect_tap(xenio_device_t * xbdev)
 {
     blkback_device_t *bdev = xbdev->bdev;
     evtchn_port_t port;
@@ -1182,7 +1198,10 @@ int blkback_connect_tap(xenio_device_t * xbdev)
     return err;
 }
 
-int blkback_disconnect_tap(xenio_device_t * xbdev)
+/**
+ * TODO Only called by blkback_frontend_changed.
+ */
+static inline int blkback_disconnect_tap(xenio_device_t * xbdev)
 {
     blkback_device_t *bdev = xbdev->bdev;
     int err = 0;
@@ -1303,6 +1322,8 @@ void blkback_remove(xenio_device_t * xbdev)
 }
 
 /**
+ * This function acts upon changes in the frontend state.
+ *
  * TODO Only called by xenio_device_check_frontend_state.
  */
 static inline int blkback_frontend_changed(xenio_device_t * xbdev,
@@ -1372,10 +1393,8 @@ static struct xenio_backend_ops blkback_ops = {
  */
 static int xenio_backend_run(void)
 {
-    int fd, err;
-
-    /* get the fd of the xenstore path we're watching */
-    fd = xenio_backend_fd();
+    const int fd = xs_fileno(backend.xs);
+	int err;
 
     do {
         fd_set rfds;
@@ -1480,7 +1499,7 @@ int main(int argc, char **argv)
         }
     }
 
-	if (!(err = xenio_backend_create(&blkback_ops, opt_max_ring_page_order))) {
+	if ((err = xenio_backend_create(&blkback_ops, opt_max_ring_page_order))) {
         WARN("error creating blkback: %s\n", strerror(err));
         goto fail;
     }

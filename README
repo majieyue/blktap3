@@ -1,4 +1,4 @@
-Thanos Makatos, 4th October 2012
+Thanos Makatos, 30th October 2012
 
 								 In a Nutshell
 blktap3 is a user-space application based on blktap2. The main difference
@@ -59,6 +59,24 @@ imported.
 - Installation: it's not clear why each binary goes to a specific location
 (some go to /usr/bin, other to /sbin), this should be justified or at least
 documented.
+- libxl__blktap_enabled: check for /dev/xen/{evtchn,gntdev,...}, xc_gnttab_open.
+- Rename libxl__blktap_devpath.
+- Rename the XENIO backend type to BLKTAP.
+- Make tapdisk-message.h an internal header.
+- tapdisk_message_name: use a static table instead of a switch.
+- Namespace macros (i.e. the TAILQ ones). See tools/include/xen-external/bsd-sys-queue-h-seddery and its usages in tools/libxl/Makefile and extras/mini-os/Makefile to create local namespaced versions for libxl and mini-os.
+- Remove
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+This is autoconf/automake stuff.
+- Remove extraneous $(CFLAGS_libblktapctl) from tools/libxl/Makefile
+- LIBDIR ?= /usr/lib comes from configure via config/Tools.mk now.
+- Check if there's a race condition in tapdisks opening the same VDI.
+- Use LOGE/LOGEV to get errno.
+- Remove make -C $(XEN_BLKTAP3) from tools/libxl/Makefile
+
+
 
 							   Summary of changes
 The most important changes w.r.t. to github blktap2 are the following:

@@ -75,7 +75,7 @@ This is autoconf/automake stuff.
 - Check if there's a race condition in tapdisks opening the same VDI.
 - Use LOGE/LOGEV to get errno.
 - Remove make -C $(XEN_BLKTAP3) from tools/libxl/Makefile
-
+- Post a question to list the asking whether we want blktap2 and blktap3 to coexist
 
 
 							   Summary of changes
